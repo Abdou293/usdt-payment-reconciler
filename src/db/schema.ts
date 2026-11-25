@@ -1,0 +1,80 @@
+// SQL schema. Amounts are stored as TEXT holding integer base units
+// (never REAL/float). Dates are ISO-8601 TEXT in UTC.
+
+export const SCHEMA_VERSION = 1;
+
+export const SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS schema_meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS orders (
+  id                      TEXT PRIMARY KEY,
+  external_ref            TEXT,
+  network                 TEXT NOT NULL,
+  token                   TEXT NOT NULL,
+  receiving_address       TEXT NOT NULL,
+  base_amount             TEXT NOT NULL,
+  payable_amount          TEXT NOT NULL,
+  status                  TEXT NOT NULL,
+  created_at              TEXT NOT NULL,
+  expires_at              TEXT NOT NULL,
+  payer_telegram_chat_id  TEXT,
+  manually_resolved       INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_orders_destination
+  ON orders (network, token, receiving_address, status);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders (status);
+
+CREATE TABLE IF NOT EXISTS payments (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  network          TEXT NOT NULL,
+  tx_hash          TEXT NOT NULL,
+  log_index        INTEGER NOT NULL,
+  token_contract   TEXT NOT NULL,
+  from_address     TEXT NOT NULL,
+  to_address       TEXT NOT NULL,
+  amount           TEXT NOT NULL,
+  block_number     INTEGER NOT NULL,
+  block_timestamp  TEXT NOT NULL,
+  status           TEXT NOT NULL,
+  order_id         TEXT REFERENCES orders(id),
+  note             TEXT,
+  first_seen_at    TEXT NOT NULL,
+  -- Idempotency: the same on-chain transfer can only ever be stored once.
+  UNIQUE (network, tx_hash, log_index)
+);
+CREATE INDEX IF NOT EXISTS idx_payments_order ON payments (order_id);
+CREATE INDEX IF NOT EXISTS idx_payments_status ON payments (status);
+
+CREATE TABLE IF NOT EXISTS chain_state (
+  network          TEXT PRIMARY KEY,
+  cursor_block     INTEGER,
+  latest_block     INTEGER,
+  last_poll_at     TEXT,
+  last_success_at  TEXT,
+  last_error       TEXT
+);
+
+-- Append-only log of every state change (who, what, when, why).
+CREATE TABLE IF NOT EXISTS audit_log (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  entity_type  TEXT NOT NULL,
+  entity_id    TEXT NOT NULL,
+  action       TEXT NOT NULL,
+  from_status  TEXT,
+  to_status    TEXT,
+  actor        TEXT NOT NULL,
+  details      TEXT,
+  created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log (entity_type, entity_id);
+
+CREATE TRIGGER IF NOT EXISTS audit_log_no_update
+  BEFORE UPDATE ON audit_log
+  BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS audit_log_no_delete
+  BEFORE DELETE ON audit_log
+  BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+`;

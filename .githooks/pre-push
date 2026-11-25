@@ -1,0 +1,19 @@
+#!/bin/sh
+# Pre-push hook: full secret scan of the working folder AND the whole git history.
+# The push is blocked if anything is found.
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "ERROR: gitleaks is not installed. Push blocked for safety."
+  exit 1
+fi
+
+echo "[pre-push] Scanning working folder for secrets..."
+gitleaks dir . --config .gitleaks.toml --redact --no-banner || {
+  echo "PUSH BLOCKED: possible secret in the working folder."; exit 1; }
+
+echo "[pre-push] Scanning full git history for secrets..."
+gitleaks git . --config .gitleaks.toml --redact --no-banner || {
+  echo "PUSH BLOCKED: possible secret in git history. Rewrite history and rotate the key."; exit 1; }
+
+echo "[pre-push] Secret scan clean."
+exit 0
