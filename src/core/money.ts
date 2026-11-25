@@ -40,3 +40,27 @@ export function unitsFromDb(value: string): bigint {
   }
   return BigInt(value);
 }
+
+/**
+ * Convert a raw on-chain amount into the system's single internal unit
+ * (USDT_DECIMALS = 6). Every network is stored in this one unit, so matching,
+ * reports and the dashboard never mix scales.
+ *
+ * - 6-decimal tokens (TRON, Arbitrum, Ethereum USDT): unchanged.
+ * - 18-decimal tokens (BSC "Binance-Peg" USDT): divided by 10^12. Anything
+ *   below 0.000001 USDT ("dust") is ROUNDED DOWN, never up, so the system can
+ *   never credit more than actually arrived. The dropped dust is returned so
+ *   the caller can record it in the audit log.
+ */
+export function toCanonicalUnits(raw: bigint, tokenDecimals: number): { units: bigint; dust: bigint } {
+  if (!Number.isInteger(tokenDecimals) || tokenDecimals < 0 || tokenDecimals > 36) {
+    throw new Error(`Unsupported token decimals: ${tokenDecimals}`);
+  }
+  if (raw < 0n) throw new Error('Negative on-chain amount');
+  if (tokenDecimals === USDT_DECIMALS) return { units: raw, dust: 0n };
+  if (tokenDecimals < USDT_DECIMALS) {
+    return { units: raw * 10n ** BigInt(USDT_DECIMALS - tokenDecimals), dust: 0n };
+  }
+  const scale = 10n ** BigInt(tokenDecimals - USDT_DECIMALS);
+  return { units: raw / scale, dust: raw % scale };
+}

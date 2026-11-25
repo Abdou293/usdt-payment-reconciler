@@ -105,6 +105,8 @@ export class PaymentProcessor {
       amount: formatAmount(event.amount),
       orderId,
       note,
+      // Tokens with other decimals (BSC: 18): keep the exact on-chain value too.
+      ...(event.raw ? { rawAmount: event.raw.amount, rawDecimals: event.raw.decimals, dustIgnored: event.raw.dustIgnored } : {}),
     });
 
     if (status === 'unmatched' || status === 'wrong_token') {

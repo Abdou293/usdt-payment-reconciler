@@ -101,6 +101,24 @@ export const envSchema = z.object({
   /** Testnet only: a test token YOU deployed on Arbitrum Sepolia. Clearly unverified. */
   EVM_UNVERIFIED_TEST_TOKEN: optionalString.refine((s) => s === undefined || EVM_ADDRESS.test(s), 'invalid address'),
 
+  // ---- Ethereum (ERC20) ----
+  ETH_WATCH_ADDRESSES: csv((s) => EVM_ADDRESS.test(s), 'ETH_WATCH_ADDRESSES').transform((l) => l.map((a) => a.toLowerCase())),
+  ETH_RPC_URL: optionalString,
+  ETH_CONFIRMATIONS: z.coerce.number().int().min(1).max(1000).default(12),
+  ETH_START_BLOCK: z.coerce.number().int().min(0).optional(),
+  ETH_MAX_BLOCKS_PER_POLL: z.coerce.number().int().min(1).max(100_000).default(500),
+  ETH_UNVERIFIED_TEST_TOKEN: optionalString.refine((s) => s === undefined || EVM_ADDRESS.test(s), 'invalid address'),
+
+  // ---- BNB Smart Chain (BEP20) ----
+  BSC_WATCH_ADDRESSES: csv((s) => EVM_ADDRESS.test(s), 'BSC_WATCH_ADDRESSES').transform((l) => l.map((a) => a.toLowerCase())),
+  BSC_RPC_URL: optionalString,
+  BSC_CONFIRMATIONS: z.coerce.number().int().min(1).max(1000).default(20),
+  BSC_START_BLOCK: z.coerce.number().int().min(0).optional(),
+  BSC_MAX_BLOCKS_PER_POLL: z.coerce.number().int().min(1).max(100_000).default(500),
+  BSC_UNVERIFIED_TEST_TOKEN: optionalString.refine((s) => s === undefined || EVM_ADDRESS.test(s), 'invalid address'),
+  /** Decimals of a self-deployed BSC TEST token (the real BSC USDT has 18). */
+  BSC_UNVERIFIED_TEST_TOKEN_DECIMALS: z.coerce.number().int().min(0).max(36).default(18),
+
   ORDER_EXPIRY_MINUTES: z.coerce.number().int().min(1).max(1440).default(30),
   UNDERPAY_TOLERANCE_UNITS: amountUnits,
   OVERPAY_TOLERANCE_UNITS: amountUnits,

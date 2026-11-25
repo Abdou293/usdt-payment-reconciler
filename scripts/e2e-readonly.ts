@@ -30,6 +30,10 @@ interface Case {
 const tronMain = requireUsdtContract('tron-mainnet');
 const tronNile = requireUsdtContract('tron-nile');
 const arb = requireUsdtContract('arbitrum-one');
+const eth = requireUsdtContract('ethereum-mainnet');
+const bsc = requireUsdtContract('bsc-mainnet');
+const ETH_RPC = process.env.ETHEREUM_RPC ?? 'https://ethereum-rpc.publicnode.com';
+const BSC_RPC = process.env.BSC_RPC ?? 'https://bsc-rpc.publicnode.com';
 const tronHttp = { retries: 5, backoffMs: 1500 };
 
 const cases: Case[] = [
@@ -56,6 +60,22 @@ const cases: Case[] = [
     confirmations: 20,
     sample: () => findEvmSample('https://arb1.arbitrum.io/rpc', arb.address, 100),
     adapter: () => new EvmRpcAdapter({ network: 'arbitrum', rpcUrl: 'https://arb1.arbitrum.io/rpc', expectedChainId: arb.chainId!, tokenContract: arb.address, explorerUrl: 'https://arbiscan.io' }),
+  },
+  {
+    label: 'Ethereum mainnet (read-only)',
+    network: 'ethereum',
+    contract: eth.address,
+    confirmations: 12,
+    sample: () => findEvmSample(ETH_RPC, eth.address, 20, 2),
+    adapter: () => new EvmRpcAdapter({ network: 'ethereum', rpcUrl: ETH_RPC, expectedChainId: eth.chainId!, tokenContract: eth.address, tokenDecimals: eth.decimals, explorerUrl: 'https://etherscan.io' }),
+  },
+  {
+    label: 'BNB Smart Chain (read-only, 18-decimal USDT)',
+    network: 'bsc',
+    contract: bsc.address,
+    confirmations: 20,
+    sample: () => findEvmSample(BSC_RPC, bsc.address, 40, 10),
+    adapter: () => new EvmRpcAdapter({ network: 'bsc', rpcUrl: BSC_RPC, expectedChainId: bsc.chainId!, tokenContract: bsc.address, tokenDecimals: bsc.decimals, explorerUrl: 'https://bscscan.com' }),
   },
 ];
 
@@ -96,6 +116,9 @@ async function runCase(c: Case): Promise<boolean> {
     console.log(`${ok ? 'PASS' : 'FAIL'}  ${c.label}`);
     console.log(`      tx ${adapter.explorerTxUrl(sample.txHash)}`);
     console.log(`      amount ${formatAmount(event.amount)} USDT, block ${event.blockNumber}, latest ${poll.latestBlock}, order status: ${order.status}`);
+    if (event.raw) {
+      console.log(`      on-chain raw ${event.raw.amount} (${event.raw.decimals} decimals), dust below 0.000001 ignored: ${event.raw.dustIgnored}`);
+    }
     return ok;
   } catch (error) {
     console.log(`FAIL  ${c.label}: ${(error as Error).message}`);

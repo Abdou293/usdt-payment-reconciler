@@ -1,6 +1,6 @@
 // Shared domain types.
 
-export type Network = 'tron' | 'arbitrum' | 'simulated';
+export type Network = 'tron' | 'arbitrum' | 'bsc' | 'ethereum' | 'simulated';
 export type Token = 'USDT';
 
 /** Lifecycle of an ORDER (what the merchant is waiting to be paid). */
@@ -67,9 +67,12 @@ export interface TransferEvent {
   tokenContract: string;
   fromAddress: string;
   toAddress: string;
+  /** Always in the internal 6-decimal unit (see toCanonicalUnits). */
   amount: bigint;
   blockNumber: number;
   blockTimestamp: Date;
+  /** Set when the token has a different number of decimals (e.g. 18 on BSC). */
+  raw?: { amount: string; decimals: number; dustIgnored: string };
 }
 
 export interface NetworkSettings {

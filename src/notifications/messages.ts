@@ -10,6 +10,8 @@ export function escapeHtml(text: string): string {
 export const NETWORK_NAMES: Record<Network, string> = {
   tron: 'TRON (TRC20)',
   arbitrum: 'Arbitrum One',
+  bsc: 'BNB Smart Chain (BEP20)',
+  ethereum: 'Ethereum (ERC20)',
   simulated: 'Simulated chain (demo)',
 };
 

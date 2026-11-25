@@ -1,7 +1,7 @@
 // Verify every USDT contract in src/chains/tokens.ts ON-CHAIN (read-only calls):
 // the contract exists, and its name / symbol / decimals are what we expect.
 // Usage: npm run verify:contracts
-// Optional env: TRON_MAINNET_API, TRON_NILE_API, ARBITRUM_ONE_RPC
+// Optional env: TRON_MAINNET_API, TRON_NILE_API, ARBITRUM_ONE_RPC, ETHEREUM_RPC, BSC_RPC
 
 import { USDT_CONTRACTS, type TokenContractInfo } from '../src/chains/tokens.js';
 import { JsonHttpClient } from '../src/chains/http.js';
@@ -12,6 +12,8 @@ const ENDPOINTS = {
   'tron-mainnet': process.env.TRON_MAINNET_API ?? 'https://api.trongrid.io',
   'tron-nile': process.env.TRON_NILE_API ?? 'https://nile.trongrid.io',
   'arbitrum-one': process.env.ARBITRUM_ONE_RPC ?? 'https://arb1.arbitrum.io/rpc',
+  'ethereum-mainnet': process.env.ETHEREUM_RPC ?? 'https://ethereum-rpc.publicnode.com',
+  'bsc-mainnet': process.env.BSC_RPC ?? 'https://bsc-dataseed.bnbchain.org',
 } as const;
 
 interface Result {
@@ -84,7 +86,7 @@ async function main(): Promise<void> {
     try {
       const result = info.environment.startsWith('tron')
         ? await verifyTron(info, ENDPOINTS[info.environment as 'tron-mainnet' | 'tron-nile'])
-        : await verifyEvm(info, ENDPOINTS[info.environment as 'arbitrum-one']);
+        : await verifyEvm(info, ENDPOINTS[info.environment as 'arbitrum-one' | 'ethereum-mainnet' | 'bsc-mainnet']);
       results.push(result);
     } catch (error) {
       results.push({
@@ -100,7 +102,7 @@ async function main(): Promise<void> {
     console.log(`      name="${r.name}" symbol="${r.symbol}" decimals=${r.decimals}`);
     for (const p of r.problems) console.log(`      problem: ${p}`);
   }
-  console.log('\narbitrum-sepolia: SKIPPED - no official USDT deployment exists to verify.\n');
+  console.log('\narbitrum-sepolia, ethereum-sepolia, bsc-testnet: SKIPPED - no official USDT deployment exists to verify.\n');
   if (results.some((r) => !r.ok)) process.exit(1);
 }
 

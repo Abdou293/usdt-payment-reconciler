@@ -33,14 +33,15 @@ export async function findTronSample(apiUrl: string, contract: string, depth: nu
 }
 
 /** A recent EVM token transfer at least `depth` blocks deep. */
-export async function findEvmSample(rpcUrl: string, contract: string, depth: number): Promise<SampleTransfer> {
+/** `span` = how many blocks to search. Keep it small on busy chains (Ethereum USDT has many transfers per block). */
+export async function findEvmSample(rpcUrl: string, contract: string, depth: number, span = 200): Promise<SampleTransfer> {
   const rpc = async <T>(method: string, params: unknown[]) =>
     (await http.post<{ result: T }>(rpcUrl, { jsonrpc: '2.0', id: 1, method, params })).result;
   const latest = Number.parseInt(await rpc<string>('eth_blockNumber', []), 16);
   const to = latest - depth;
   const logs = await rpc<Array<{ blockNumber: string; transactionHash: string; logIndex: string; topics: string[]; data: string }>>('eth_getLogs', [
     {
-      fromBlock: `0x${(to - 200).toString(16)}`,
+      fromBlock: `0x${(to - span).toString(16)}`,
       toBlock: `0x${to.toString(16)}`,
       address: contract,
       topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'],

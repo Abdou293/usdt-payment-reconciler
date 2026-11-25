@@ -48,6 +48,25 @@ async function recordArbitrum(): Promise<void> {
   save('arbitrum-one', sample, query, events.length, canonical, responses);
 }
 
+async function recordEvm(name: 'ethereum-mainnet' | 'bsc-mainnet', network: 'ethereum' | 'bsc', rpc: string, explorer: string, depth: number, span: number): Promise<void> {
+  const token = requireUsdtContract(name);
+  const sample = await findEvmSample(rpc, token.address, depth, span);
+  const responses: FixtureResponses = {};
+  const adapter = new EvmRpcAdapter({
+    network,
+    rpcUrl: rpc,
+    expectedChainId: token.chainId!,
+    tokenContract: token.address,
+    tokenDecimals: token.decimals,
+    explorerUrl: explorer,
+    http: { fetch: recordingFetch(responses) },
+  });
+  const query = { fromBlock: sample.blockNumber, toBlock: sample.blockNumber, tokenContract: token.address, toAddresses: [sample.toAddress] };
+  const events = await adapter.getTransfers(query);
+  const canonical = await adapter.isTransferCanonical(sample.txHash, sample.logIndex);
+  save(name, sample, query, events.length, canonical, responses, token.decimals);
+}
+
 function save(
   name: string,
   sample: Awaited<ReturnType<typeof findTronSample>>,
@@ -55,6 +74,7 @@ function save(
   eventCount: number,
   canonical: boolean,
   responses: FixtureResponses,
+  tokenDecimals = 6,
 ): void {
   // Keep fixtures small: the adapter only reads TRON block headers.
   for (const [key, value] of Object.entries(responses)) {
@@ -66,7 +86,7 @@ function save(
   const fixture = {
     note: 'Public on-chain data recorded read-only for offline adapter tests. No keys, no funds.',
     recordedAt: new Date().toISOString(),
-    sample: { ...sample, amountUnits: sample.amountUnits.toString(), amount: formatAmount(sample.amountUnits) },
+    sample: { ...sample, tokenDecimals, amountUnits: sample.amountUnits.toString(), amount: formatAmount(sample.amountUnits, tokenDecimals) },
     query,
     expected: { eventCount, canonical },
     responses,
@@ -75,5 +95,12 @@ function save(
   console.log(`${name}: tx ${sample.txHash} block ${sample.blockNumber} -> ${eventCount} transfer(s), canonical=${canonical} -> ${file}`);
 }
 
-await recordTron();
-await recordArbitrum();
+const only = process.argv[2];
+if (!only || only === 'tron') await recordTron();
+if (!only || only === 'arbitrum') await recordArbitrum();
+if (!only || only === 'ethereum') {
+  await recordEvm('ethereum-mainnet', 'ethereum', process.env.ETHEREUM_RPC ?? 'https://ethereum-rpc.publicnode.com', 'https://etherscan.io', 20, 2);
+}
+if (!only || only === 'bsc') {
+  await recordEvm('bsc-mainnet', 'bsc', process.env.BSC_RPC ?? 'https://bsc-rpc.publicnode.com', 'https://bscscan.com', 40, 10);
+}

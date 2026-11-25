@@ -8,7 +8,7 @@ There are two different things to deploy:
 | | Public demo | Real merchant install |
 | --- | --- | --- |
 | `APP_MODE` | `demo` | `testnet` (or `mainnet`, read-only) |
-| Chain | Simulated, in memory | TRON / Arbitrum public data |
+| Chain | Simulated, in memory | TRON / BSC / Ethereum / Arbitrum public data |
 | Data | Seeded, reset on every restart | Must be kept (persistent disk) |
 | Secrets | None | Admin password, API key, Telegram token, webhook secret |
 | Host | Render free plan is fine | Needs a persistent disk (see below) |
@@ -81,7 +81,9 @@ Set them in the host's secret settings (never in a committed file). See `.env.ex
 | `MERCHANT_API_KEY` | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` | Leave empty to disable the merchant API. |
 | `TRON_WATCH_ADDRESSES` | your **public** TRON address(es) | Comma-separated. |
 | `TRONGRID_API_KEY` | free key from trongrid.io | Optional but avoids HTTP 429. |
-| `EVM_WATCH_ADDRESSES`, `EVM_RPC_URL` | public address + RPC URL | Testnet needs `EVM_UNVERIFIED_TEST_TOKEN` (there is no official USDT on Arbitrum Sepolia). |
+| `EVM_WATCH_ADDRESSES`, `EVM_RPC_URL` | public address + RPC URL | Arbitrum. Testnet needs `EVM_UNVERIFIED_TEST_TOKEN` (there is no official USDT on Arbitrum Sepolia). |
+| `BSC_WATCH_ADDRESSES`, `BSC_RPC_URL` | public address + an RPC that serves `eth_getLogs` | BNB Smart Chain (BEP20, 18-decimal USDT issued by Binance). Mainnet read-only. |
+| `ETH_WATCH_ADDRESSES`, `ETH_RPC_URL` | public address + RPC URL | Ethereum (ERC20). Mainnet read-only. Default 12 confirmations. |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_ADMIN_CHAT_ID` | from @BotFather / @userinfobot | Optional. Also enables "Forgot password?" (codes go to the admin chat). |
 | `WEBHOOK_URL`, `WEBHOOK_SECRET` | your HTTPS endpoint + 32+ random characters | Optional. Verify signatures as in `examples/webhook-receiver.ts`. |
 

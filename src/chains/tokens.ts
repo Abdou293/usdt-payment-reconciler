@@ -2,7 +2,13 @@
 // (listed next to it) and is checked on-chain by `npm run verify:contracts`.
 // Never add an address from a blog, forum or AI answer without that check.
 
-export type ChainEnvironment = 'tron-mainnet' | 'tron-nile' | 'arbitrum-one' | 'arbitrum-sepolia';
+export type ChainEnvironment =
+  | 'tron-mainnet'
+  | 'tron-nile'
+  | 'arbitrum-one'
+  | 'arbitrum-sepolia'
+  | 'ethereum-mainnet'
+  | 'bsc-mainnet';
 
 export interface TokenContractInfo {
   environment: ChainEnvironment;
@@ -12,6 +18,8 @@ export interface TokenContractInfo {
   /** EVM only: the chain id the RPC must report. */
   chainId?: number;
   source: string;
+  /** Who issues the token, when it is not Tether itself. */
+  issuerNote?: string;
   isTestnet: boolean;
 }
 
@@ -42,6 +50,31 @@ export const USDT_CONTRACTS: Partial<Record<ChainEnvironment, TokenContractInfo>
     source: 'https://docs.usdt0.to/technical-documentation/deployments (USDT0 "Token" entry for Arbitrum One)',
     isTestnet: false,
   },
+  'ethereum-mainnet': {
+    environment: 'ethereum-mainnet',
+    address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+    decimals: 6,
+    expectedSymbol: 'USDT',
+    chainId: 1,
+    source: 'https://tether.to/en/supported-protocols/ (Tether, "Ethereum Network" USD₮ contract address)',
+    isTestnet: false,
+  },
+  'bsc-mainnet': {
+    environment: 'bsc-mainnet',
+    address: '0x55d398326f99059fF775485246999027B3197955',
+    // NOTE: 18 decimals, not 6. Amounts are converted to the internal 6-decimal
+    // unit by the adapter (see toCanonicalUnits in src/core/money.ts).
+    decimals: 18,
+    expectedSymbol: 'USDT',
+    chainId: 56,
+    source:
+      'https://www.binance.com/en/proof-of-collateral (Binance, USDT "Wrapped Token" BEP20 contract). ' +
+      'Tether lists BNB Smart Chain as a supported protocol but publishes no USDT address for it.',
+    issuerNote: 'Binance-Peg token, issued and backed by Binance (not by Tether).',
+    isTestnet: false,
+  },
+  // No official USDT on Ethereum Sepolia or BSC testnet either: testnet runs
+  // use the simulated adapter or a self-deployed token marked UNVERIFIED.
   // 'arbitrum-sepolia': intentionally absent. Tether/USDT0 publish NO official
   // USDT on Arbitrum Sepolia, so there is nothing we can verify. EVM testnet
   // runs use the simulated adapter or a test token you deploy yourself and

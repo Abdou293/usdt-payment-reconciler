@@ -42,6 +42,21 @@ export interface Runtime {
   warnings: string[];
 }
 
+interface EvmNetworkSpec {
+  network: 'arbitrum' | 'ethereum' | 'bsc';
+  name: string;
+  /** Prefix of this network's settings in .env, e.g. BSC_WATCH_ADDRESSES. */
+  prefix: 'EVM' | 'ETH' | 'BSC';
+  addresses: string[];
+  rpcUrl: string | undefined;
+  confirmations: number;
+  startBlock: number | undefined;
+  maxBlocks: number;
+  mainnetToken: 'arbitrum-one' | 'ethereum-mainnet' | 'bsc-mainnet';
+  explorer: string;
+  testnet: { name: string; chainId: number; explorer: string; token: string | undefined; decimals: number };
+}
+
 export const DEMO_ADDRESSES = ['SIM-DEMO-ADDRESS-1', 'SIM-DEMO-ADDRESS-2'];
 
 export function buildRuntime(env: Env): Runtime {
@@ -79,34 +94,68 @@ export function buildRuntime(env: Env): Runtime {
       if (!env.TRONGRID_API_KEY) warnings.push('TRONGRID_API_KEY not set: the free anonymous limit is low and may return HTTP 429.');
     }
 
-    if (env.EVM_WATCH_ADDRESSES.length > 0) {
-      if (!env.EVM_RPC_URL) throw new Error('EVM_WATCH_ADDRESSES is set but EVM_RPC_URL is missing');
+    // EVM networks share one adapter; each has its own verified USDT contract.
+    const evmNetworks: EvmNetworkSpec[] = [
+      {
+        network: 'arbitrum', name: 'Arbitrum One', prefix: 'EVM', addresses: env.EVM_WATCH_ADDRESSES, rpcUrl: env.EVM_RPC_URL,
+        confirmations: env.EVM_CONFIRMATIONS, startBlock: env.EVM_START_BLOCK, maxBlocks: env.EVM_MAX_BLOCKS_PER_POLL,
+        mainnetToken: 'arbitrum-one', explorer: 'https://arbiscan.io',
+        testnet: { name: 'Arbitrum Sepolia', chainId: 421614, explorer: 'https://sepolia.arbiscan.io', token: env.EVM_UNVERIFIED_TEST_TOKEN, decimals: 6 },
+      },
+      {
+        network: 'ethereum', name: 'Ethereum', prefix: 'ETH', addresses: env.ETH_WATCH_ADDRESSES, rpcUrl: env.ETH_RPC_URL,
+        confirmations: env.ETH_CONFIRMATIONS, startBlock: env.ETH_START_BLOCK, maxBlocks: env.ETH_MAX_BLOCKS_PER_POLL,
+        mainnetToken: 'ethereum-mainnet', explorer: 'https://etherscan.io',
+        testnet: { name: 'Ethereum Sepolia', chainId: 11155111, explorer: 'https://sepolia.etherscan.io', token: env.ETH_UNVERIFIED_TEST_TOKEN, decimals: 6 },
+      },
+      {
+        network: 'bsc', name: 'BNB Smart Chain', prefix: 'BSC', addresses: env.BSC_WATCH_ADDRESSES, rpcUrl: env.BSC_RPC_URL,
+        confirmations: env.BSC_CONFIRMATIONS, startBlock: env.BSC_START_BLOCK, maxBlocks: env.BSC_MAX_BLOCKS_PER_POLL,
+        mainnetToken: 'bsc-mainnet', explorer: 'https://bscscan.com',
+        testnet: { name: 'BSC testnet', chainId: 97, explorer: 'https://testnet.bscscan.com', token: env.BSC_UNVERIFIED_TEST_TOKEN, decimals: env.BSC_UNVERIFIED_TEST_TOKEN_DECIMALS },
+      },
+    ];
+
+    for (const n of evmNetworks) {
+      if (n.addresses.length === 0) continue;
+      if (!n.rpcUrl) throw new Error(`${n.prefix}_WATCH_ADDRESSES is set but ${n.prefix}_RPC_URL is missing`);
       let tokenAddress: string;
       let chainId: number;
+      let decimals: number;
+      let explorer: string;
+      let label: string;
       if (isMainnet) {
-        const token = requireUsdtContract('arbitrum-one');
+        const token = requireUsdtContract(n.mainnetToken);
         tokenAddress = token.address;
         chainId = token.chainId!;
+        decimals = token.decimals;
+        explorer = n.explorer;
+        label = `${n.name} (READ-ONLY watch)`;
+        if (token.issuerNote) warnings.push(`${n.name}: ${token.issuerNote}`);
       } else {
-        if (!env.EVM_UNVERIFIED_TEST_TOKEN) {
-          throw new Error('Arbitrum Sepolia has no official USDT. Set EVM_UNVERIFIED_TEST_TOKEN or remove EVM_WATCH_ADDRESSES.');
+        if (!n.testnet.token) {
+          throw new Error(`${n.testnet.name} has no official USDT. Set ${n.prefix}_UNVERIFIED_TEST_TOKEN or remove ${n.prefix}_WATCH_ADDRESSES.`);
         }
-        tokenAddress = env.EVM_UNVERIFIED_TEST_TOKEN;
-        chainId = 421614; // Arbitrum Sepolia
-        warnings.push(`EVM token ${tokenAddress} is a self-deployed TEST token and is NOT verified USDT.`);
+        tokenAddress = n.testnet.token;
+        chainId = n.testnet.chainId;
+        decimals = n.testnet.decimals;
+        explorer = n.testnet.explorer;
+        label = `${n.testnet.name} testnet (unverified test token)`;
+        warnings.push(`${n.name} token ${tokenAddress} is a self-deployed TEST token and is NOT verified USDT.`);
       }
       pending.push({
-        settings: { network: 'arbitrum', usdtContract: tokenAddress, requiredConfirmations: env.EVM_CONFIRMATIONS, watchAddresses: env.EVM_WATCH_ADDRESSES },
+        settings: { network: n.network, usdtContract: tokenAddress, requiredConfirmations: n.confirmations, watchAddresses: n.addresses },
         adapter: new EvmRpcAdapter({
-          network: 'arbitrum',
-          rpcUrl: env.EVM_RPC_URL,
+          network: n.network,
+          rpcUrl: n.rpcUrl,
           expectedChainId: chainId,
           tokenContract: tokenAddress,
-          explorerUrl: isMainnet ? 'https://arbiscan.io' : 'https://sepolia.arbiscan.io',
+          tokenDecimals: decimals,
+          explorerUrl: explorer,
         }),
-        label: isMainnet ? 'Arbitrum One (READ-ONLY watch)' : 'Arbitrum Sepolia testnet (unverified test token)',
-        startBlock: env.EVM_START_BLOCK,
-        maxBlocks: env.EVM_MAX_BLOCKS_PER_POLL,
+        label,
+        startBlock: n.startBlock,
+        maxBlocks: n.maxBlocks,
       });
     }
 

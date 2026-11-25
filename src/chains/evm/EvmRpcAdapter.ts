@@ -1,7 +1,8 @@
-// EVM (Arbitrum) ERC20 USDT watcher using standard JSON-RPC. READ-ONLY:
+// EVM (Arbitrum, Ethereum, BNB Smart Chain) USDT watcher using standard JSON-RPC. READ-ONLY:
 // only eth_chainId, eth_blockNumber, eth_getLogs, eth_getBlockByNumber and
 // eth_getTransactionReceipt are used. Nothing is ever signed or sent.
 
+import { toCanonicalUnits } from '../../core/money.js';
 import type { Network, TransferEvent } from '../../core/types.js';
 import type { ChainAdapter, TransferQuery } from '../ChainAdapter.js';
 import { JsonHttpClient, redact, type HttpOptions } from '../http.js';
@@ -10,8 +11,10 @@ export const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
 export interface EvmRpcOptions {
-  network: Network; //          'arbitrum'
+  network: Network; //          'arbitrum' | 'ethereum' | 'bsc'
   rpcUrl: string;
+  /** Decimals of the token contract (6 for most USDT, 18 on BSC). Default 6. */
+  tokenDecimals?: number;
   expectedChainId: number;
   tokenContract: string;
   explorerUrl: string; //       e.g. https://arbiscan.io
@@ -88,7 +91,7 @@ export class EvmRpcAdapter implements ChainAdapter {
         tokenContract: this.contract,
         fromAddress: topicToAddress(log.topics[1]!),
         toAddress: topicToAddress(log.topics[2]!),
-        amount: BigInt(log.data === '0x' ? '0' : log.data),
+        ...this.amountOf(BigInt(log.data === '0x' ? '0' : log.data)),
         blockNumber,
         // The log's own blockTimestamp field is unreliable on some RPCs ("0x0"),
         // so the time is read from the block header.
@@ -107,6 +110,14 @@ export class EvmRpcAdapter implements ChainAdapter {
         l.address.toLowerCase() === this.contract &&
         l.topics[0]?.toLowerCase() === TRANSFER_TOPIC,
     );
+  }
+
+  /** Raw on-chain value -> internal 6-decimal unit (rounded down), plus the raw value for the audit log. */
+  private amountOf(rawValue: bigint): Pick<TransferEvent, 'amount' | 'raw'> {
+    const decimals = this.options.tokenDecimals ?? 6;
+    const { units, dust } = toCanonicalUnits(rawValue, decimals);
+    if (decimals === 6) return { amount: units };
+    return { amount: units, raw: { amount: rawValue.toString(), decimals, dustIgnored: dust.toString() } };
   }
 
   explorerTxUrl(txHash: string): string {

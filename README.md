@@ -1,6 +1,7 @@
 # USDT Payment Verification & Reconciliation System
 
-Detects incoming **USDT** deposits on **TRON (TRC20)** and **Arbitrum**, matches each one to an order,
+Detects incoming **USDT** deposits on **TRON (TRC20)**, **BNB Smart Chain (BEP20)**, **Ethereum (ERC20)**
+and **Arbitrum**, matches each one to an order,
 waits for safe confirmations, notifies the payer and the merchant (Telegram + signed webhook), and
 produces daily and weekly **reconciliation reports** with a review queue for every problem payment.
 
@@ -20,7 +21,7 @@ quiet period can take up to a minute to wake up.)
 | Problem a merchant has | What the system does |
 | --- | --- |
 | "Which customer sent this 50 USDT?" | Each order gets a **unique payable amount** (e.g. `49.990347`), so a deposit maps to exactly one order. Fallbacks: base amount, single open order, otherwise *unmatched*. |
-| "Is the payment final?" | Waits for N confirmations (TRON 19, Arbitrum 20 by default) and re-checks recent payments for **chain reorganizations**. |
+| "Is the payment final?" | Waits for N confirmations (by default TRON 19, BSC 20, Ethereum 12, Arbitrum 20; all configurable) and re-checks recent payments for **chain reorganizations**. |
 | "They sent too little / too much / too late / the wrong token" | Separate statuses (`underpaid`, `overpaid`, `late_payment`, `wrong_token`, `unmatched`) land in a **review queue**. A human decides, with a written reason. |
 | "Did we receive what we asked for this week?" | **Reconciliation report** per network: requested vs. received, every exception listed, CSV export. |
 | "My server slept / restarted" | Watchers resume from a cursor saved in the database and catch up; notifications use an **outbox** with retries, so nothing is lost or sent twice. |
@@ -34,7 +35,7 @@ Orders can be created from the **dashboard**, the **REST API** or the **Telegram
 flowchart LR
     subgraph Chains[Public blockchain data - read only]
         TG[TronGrid API<br/>TRON TRC20]
-        RPC[JSON-RPC<br/>Arbitrum]
+        RPC[JSON-RPC<br/>BSC, Ethereum, Arbitrum]
         SIM[Simulated chain<br/>demo + tests]
     end
 
@@ -103,7 +104,11 @@ Full state machine and rules: [docs/state-machine.md](docs/state-machine.md).
 - **Append-only audit log.** SQLite triggers block `UPDATE`/`DELETE` on `audit_log`.
 - **Transactional outbox.** The status change and its notification event are written in the same
   database transaction; a dispatcher delivers them with deduplication and exponential backoff.
-- **Pluggable chains.** One `ChainAdapter` interface; TRON, EVM and the simulator implement it.
+- **Pluggable chains.** One `ChainAdapter` interface; TRON, EVM and the simulator implement it. BSC,
+  Ethereum and Arbitrum share the EVM adapter; a new EVM chain is a verified contract entry plus settings.
+- **One internal money unit.** Every amount is stored as integer micro-USDT (6 decimals). BSC's USDT has
+  **18 decimals**, so the adapter divides by 10^12 and rounds **down** (never credits more than arrived);
+  the exact on-chain value and any dust below 0.000001 USDT are kept in the audit log.
 - **Data layer behind an interface** (`Store`), currently SQLite (`node:sqlite`, no native module).
 - **Contract addresses verified on-chain,** never typed from memory (see below).
 
@@ -134,21 +139,25 @@ Details and the final checklist: [SECURITY.md](SECURITY.md).
 | TRON mainnet | `TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t` | [tether.to](https://tether.to/en/supported-protocols/) |
 | TRON Nile (testnet) | `TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf` | [Nile faucet](https://nileex.io/join/getJoinPage) |
 | Arbitrum One (USD₮0) | `0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9` | [USDT0 docs](https://docs.usdt0.to/technical-documentation/deployments) |
-| Arbitrum Sepolia | none: no official deployment exists | (a self-deployed token must be labelled UNVERIFIED) |
+| BNB Smart Chain (BEP20) | `0x55d398326f99059fF775485246999027B3197955` (18 decimals) | [Binance Proof of Collateral](https://www.binance.com/en/proof-of-collateral). Issued by **Binance** ("Binance-Peg"), not by Tether; Tether lists BNB Smart Chain but publishes no USDT address for it. |
+| Ethereum (ERC20) | `0xdAC17F958D2ee523a2206206994597C13D831ec7` | [tether.to](https://tether.to/en/supported-protocols/) |
+| Arbitrum Sepolia, Ethereum Sepolia, BSC testnet | none: no official deployment exists | (a self-deployed token must be labelled UNVERIFIED) |
 
-`npm run verify:contracts` checks contract code, name, symbol and decimals on-chain.
+`npm run verify:contracts` checks chain id, contract code, name, symbol and decimals on-chain. All five
+entries passed (last run 2026-11-26).
 
 ## Testing: what was actually run
 
-- **127 automated tests** (Vitest) covering money arithmetic, matching, the state machine, the full
+- **141 automated tests** (Vitest) covering money arithmetic, matching, the state machine, the full
   payment flow on the simulated chain (underpay, overpay, late, expiry, duplicates, reorgs, restart
   catch-up), notifications and webhook signatures, the HTTP API (auth, CSRF, rate limits, idempotency,
-  validation, password change and reset), reports and CSV export.
-- **Chain adapters** are tested against **recorded real responses** from TronGrid and an Arbitrum One
-  RPC (`tests/fixtures`), with no network access during tests.
+  validation, password change and reset), reports and CSV export, and the 18-decimal conversion.
+- **Chain adapters** are tested against **recorded real responses** from TronGrid and from Arbitrum One,
+  Ethereum and BSC RPCs (`tests/fixtures`), with no network access during tests.
 - **Live read-only end-to-end check** (`npm run e2e:readonly`): finds a real recent USDT transfer on
-  TRON Nile, TRON mainnet and Arbitrum One, creates a matching order and runs it through the real
-  watcher to `confirmed`. It passed on all three networks during development. No funds are moved.
+  TRON Nile, TRON mainnet, Arbitrum One, Ethereum and BNB Smart Chain, creates a matching order and runs
+  it through the real watcher to `confirmed`. It passed on all five during development (last run
+  2026-11-26). No funds are moved.
 - The **public demo** was checked in a browser after deployment (login, simulated payment to
   `confirmed`, CSRF rejection, health page).
 
@@ -208,7 +217,12 @@ gitleaks. Hosted on Render (free plan) for the demo.
 ## Limitations (honest list)
 
 - **Not audited and not production-hardened.** Review it yourself before any real use.
-- Confirmation depth on Arbitrum is about the L2 sequencer, not Ethereum L1 finality.
+- Confirmation depth on Arbitrum is about the L2 sequencer, not Ethereum L1 finality. On Ethereum the
+  default of 12 blocks is a practical choice; full finality takes about 64 blocks (raise `ETH_CONFIRMATIONS`
+  for large amounts).
+- BSC and Ethereum need an RPC provider that serves `eth_getLogs` (the official BSC public endpoint
+  does not). Only mainnet is supported for them, read-only: there is no official test USDT.
+- TON and Solana are not implemented: they would each need a new adapter.
 - An underpaid order that is later topped up needs the admin to assign the second payment.
 - Only SQLite is implemented; a Postgres store would be a new `Store` implementation.
 - One process: watcher, bot and API run together, sized for a small merchant.
