@@ -9,7 +9,7 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "prepare": "git config core.hooksPath .githooks",
+    "prepare": "node scripts/enable-git-hooks.mjs",
     "dev": "tsx --env-file-if-exists=.env src/main.ts",
     "start": "node --env-file-if-exists=.env dist/main.js",
     "build": "tsc -p tsconfig.json",
@@ -26,7 +26,8 @@
     "dashboard:install": "npm --prefix dashboard ci",
     "dashboard:dev": "npm --prefix dashboard run dev",
     "dashboard:build": "npm --prefix dashboard run build",
-    "build:all": "npm run build && npm run dashboard:build"
+    "build:all": "npm run build && npm run dashboard:build",
+    "build:render": "npm ci --include=dev && npm run build && npm --prefix dashboard ci --include=dev && npm run dashboard:build"
   },
   "devDependencies": {
     "@types/node": "^26.6.10",

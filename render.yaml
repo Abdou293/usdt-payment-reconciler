@@ -1,0 +1,28 @@
+# Render Blueprint for the PUBLIC DEMO (simulated chain only).
+# Free plan: the service sleeps when idle and its disk is temporary, so the
+# demo database is re-seeded on every deploy or restart. That is intended.
+services:
+  - type: web
+    name: usdt-payment-reconciler-demo
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm run build:render
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: APP_MODE
+        value: demo # never change the public demo to testnet/mainnet
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "24"
+      - key: TRUST_PROXY
+        value: "true"
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: DATABASE_URL
+        value: file:./data/demo.db
+      - key: POLL_INTERVAL_SECONDS
+        value: "10"
