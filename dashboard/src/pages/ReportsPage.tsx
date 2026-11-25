@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api, exportUrl, type OrderStatus } from '../api';
-import { Card, daysAgoUtc, Empty, ErrorNote, fmtAmount, fmtTime, STATUS_LABELS, todayUtc, useAsync } from '../ui';
+import { Card, daysAgoUtc, Empty, ErrorNote, fmtAmount, STATUS_LABELS, todayUtc, useAsync } from '../ui';
 
 export function ReportsPage() {
   const [period, setPeriod] = useState<'day' | 'week'>('week');
@@ -32,16 +32,16 @@ export function ReportsPage() {
         {loading && !data && <p className="muted">Loading…</p>}
         {data && (
           <>
-            <p className="muted">{fmtTime(data.from)} → {fmtTime(data.to)}</p>
+            <p className="muted">{fmtUtc(data.from)} → {fmtUtc(data.to)} (UTC)</p>
             {data.networks.length === 0 && <Empty>No activity in this period.</Empty>}
             {data.networks.map((n) => (
               <div key={n.network} className="report-network">
                 <h3>{n.network}</h3>
                 <div className="stats">
-                  <Stat label="Requested" value={fmtAmount(n.requestedTotal)} hint={`${n.ordersCreated} orders created`} />
+                  <Stat label="Requested" value={fmtAmount(n.requestedTotal)} hint={`${plural(n.ordersCreated, 'order')} created`} />
                   <Stat label="Received for confirmed orders" value={fmtAmount(n.confirmedReceivedTotal)} hint={`${n.ordersByStatus.confirmed ?? 0} confirmed`} />
-                  <Stat label="All USDT deposits seen" value={fmtAmount(n.depositsTotal)} hint={`${n.depositsCount} transfers`} />
-                  <Stat label="Unmatched" value={fmtAmount(n.unmatchedTotal)} hint={`${n.unmatchedCount} transfers`} tone={n.unmatchedCount ? 'warn' : undefined} />
+                  <Stat label="All USDT deposits seen" value={fmtAmount(n.depositsTotal)} hint={plural(n.depositsCount, 'transfer')} />
+                  <Stat label="Unmatched" value={fmtAmount(n.unmatchedTotal)} hint={plural(n.unmatchedCount, 'transfer')} tone={n.unmatchedCount ? 'warn' : undefined} />
                 </div>
                 <div className="status-row">
                   {Object.entries(n.ordersByStatus).map(([s, c]) => (
@@ -91,6 +91,9 @@ export function ReportsPage() {
     </>
   );
 }
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const fmtUtc = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' });
 
 function Stat({ label, value, hint, tone }: { label: string; value: string; hint: string; tone?: 'warn' }) {
   return (
