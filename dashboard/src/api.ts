@@ -62,6 +62,7 @@ export interface SessionInfo {
   csrf_token: string | null;
   mode: 'demo' | 'testnet' | 'mainnet';
   demo_credentials: { username: string; password: string } | null;
+  password_reset_available: boolean;
   networks: Array<{ network: string; label: string }>;
 }
 
@@ -137,7 +138,7 @@ async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown):
   });
   const data = (await res.json().catch(() => ({}))) as { error?: string };
   if (!res.ok) {
-    if (res.status === 401 && path !== '/login') onUnauthorized();
+    if (res.status === 401 && path !== '/login' && path !== '/password') onUnauthorized();
     throw new ApiError(res.status, data.error ?? `Request failed (${res.status})`);
   }
   return data as T;
@@ -154,6 +155,11 @@ export const api = {
   session: () => request<SessionInfo>('GET', '/session'),
   login: (username: string, password: string) => request<{ username: string; csrf_token: string }>('POST', '/login', { username, password }),
   logout: () => request<{ ok: true }>('POST', '/logout'),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: true }>('POST', '/password', { current_password: currentPassword, new_password: newPassword }),
+  forgotPassword: (username: string) => request<{ ok: true; message: string }>('POST', '/password/forgot', { username }),
+  resetPassword: (username: string, code: string, newPassword: string) =>
+    request<{ ok: true }>('POST', '/password/reset', { username, code, new_password: newPassword }),
 
   listOrders: (f: { status?: string; network?: string; q?: string; from?: string; to?: string; page?: number }) =>
     request<{ items: OrderDto[]; total: number; page: number; page_size: number }>('GET', `/orders${qs(f)}`),

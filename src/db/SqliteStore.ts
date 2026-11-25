@@ -10,6 +10,7 @@ import type { Network, Order, OrderStatus, Payment, PaymentStatus, Token } from 
 import { SCHEMA_SQL, SCHEMA_VERSION } from './schema.js';
 import type {
   AdminUser,
+  PasswordResetRecord,
   OrderFilter,
   SessionRecord,
   AuditEntry,
@@ -426,6 +427,75 @@ export class SqliteStore implements Store {
 
   async deleteExpiredSessions(now: Date): Promise<void> {
     this.db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now.toISOString());
+  }
+
+  async updateAdminPassword(username: string, passwordHash: string): Promise<void> {
+    this.db.prepare('UPDATE admin_users SET password_hash = ? WHERE username = ?').run(passwordHash, username);
+  }
+
+  async deleteSessionsForUser(username: string, exceptIdHash?: string): Promise<void> {
+    if (exceptIdHash) {
+      this.db.prepare('DELETE FROM sessions WHERE username = ? AND id_hash <> ?').run(username, exceptIdHash);
+    } else {
+      this.db.prepare('DELETE FROM sessions WHERE username = ?').run(username);
+    }
+  }
+
+  // ---------- Password resets ----------
+
+  async createPasswordReset(r: Omit<PasswordResetRecord, 'id' | 'attempts' | 'usedAt'>): Promise<void> {
+    this.db
+      .prepare('INSERT INTO password_resets (username, code_hash, created_at, expires_at) VALUES (?, ?, ?, ?)')
+      .run(r.username, r.codeHash, r.createdAt.toISOString(), r.expiresAt.toISOString());
+  }
+
+  async getActivePasswordReset(username: string, now: Date): Promise<PasswordResetRecord | null> {
+    const row = this.db
+      .prepare(
+        `SELECT * FROM password_resets WHERE username = ? AND used_at IS NULL AND expires_at > ?
+         ORDER BY id DESC LIMIT 1`,
+      )
+      .get(username, now.toISOString()) as Row | undefined;
+    if (!row) return null;
+    return {
+      id: Number(row.id),
+      username: String(row.username),
+      codeHash: String(row.code_hash),
+      attempts: Number(row.attempts),
+      createdAt: new Date(String(row.created_at)),
+      expiresAt: new Date(String(row.expires_at)),
+      usedAt: row.used_at === null ? null : new Date(String(row.used_at)),
+    };
+  }
+
+  async countRecentPasswordResets(username: string, since: Date): Promise<number> {
+    const row = this.db
+      .prepare('SELECT COUNT(*) AS n FROM password_resets WHERE username = ? AND created_at >= ?')
+      .get(username, since.toISOString()) as Row;
+    return Number(row.n);
+  }
+
+  async incrementPasswordResetAttempts(id: number): Promise<void> {
+    this.db.prepare('UPDATE password_resets SET attempts = attempts + 1 WHERE id = ?').run(id);
+  }
+
+  async closePasswordResets(username: string, at: Date): Promise<void> {
+    this.db
+      .prepare('UPDATE password_resets SET used_at = ? WHERE username = ? AND used_at IS NULL')
+      .run(at.toISOString(), username);
+  }
+
+  // ---------- Meta ----------
+
+  async getMeta(key: string): Promise<string | null> {
+    const row = this.db.prepare('SELECT value FROM schema_meta WHERE key = ?').get(key) as Row | undefined;
+    return row ? String(row.value) : null;
+  }
+
+  async setMeta(key: string, value: string): Promise<void> {
+    this.db
+      .prepare('INSERT INTO schema_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+      .run(key, value);
   }
 
   // ---------- Audit ----------

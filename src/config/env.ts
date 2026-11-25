@@ -74,6 +74,8 @@ export const envSchema = z.object({
   ADMIN_USERNAME: z.string().regex(/^[a-zA-Z0-9_.-]{3,32}$/, '3-32 letters, digits, . _ -').default('admin'),
   /** Only used once, to create the first admin (stored as a bcrypt hash). */
   ADMIN_INITIAL_PASSWORD: secretString.refine((s) => s === undefined || (s.length >= 12 && s.length <= 128), 'must be 12-128 characters'),
+  // Emergency reset by the server owner: sets ADMIN_USERNAME's password once, then remove it.
+  ADMIN_RESET_PASSWORD: secretString.refine((s) => s === undefined || (s.length >= 12 && s.length <= 128), 'must be 12-128 characters'),
   /** Public demo login (APP_MODE=demo only). Shown on the login page on purpose. */
   DEMO_ADMIN_PASSWORD: z.string().min(12).max(128).default('demo-password-2026'),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(168).default(8),

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, setCsrfToken, setUnauthorizedHandler, type SessionInfo } from './api';
+import { AccountPage } from './pages/AccountPage';
 import { HealthPage } from './pages/HealthPage';
 import { LoginPage } from './pages/LoginPage';
 import { OrderDetailPage } from './pages/OrderDetailPage';
@@ -7,7 +8,7 @@ import { OrdersPage } from './pages/OrdersPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { ReviewPage } from './pages/ReviewPage';
 
-/** Minimal hash router: #/orders, #/orders/<id>, #/review, #/reports, #/health */
+/** Minimal hash router: #/orders, #/orders/<id>, #/review, #/reports, #/health, #/account */
 function useHashRoute(): string[] {
   const read = () => window.location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   const [parts, setParts] = useState(read);
@@ -24,6 +25,7 @@ const NAV = [
   { href: '#/review', key: 'review', label: 'Review queue' },
   { href: '#/reports', key: 'reports', label: 'Reconciliation' },
   { href: '#/health', key: 'health', label: 'Health' },
+  { href: '#/account', key: 'account', label: 'Account' },
 ];
 
 export function App() {
@@ -57,6 +59,7 @@ export function App() {
   else if (section === 'review') page = <ReviewPage />;
   else if (section === 'reports') page = <ReportsPage />;
   else if (section === 'health') page = <HealthPage session={session} />;
+  else if (section === 'account') page = <AccountPage session={session} />;
   else page = <OrdersPage session={session} />;
 
   return (

@@ -1,7 +1,7 @@
 // SQL schema. Amounts are stored as TEXT holding integer base units
 // (never REAL/float). Dates are ISO-8601 TEXT in UTC.
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -127,6 +127,20 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions (expires_at);
+
+-- v4: one-time password reset codes (sent to the admin's Telegram).
+-- Only the SHA-256 hash of a code is stored. A code expires after 15 minutes,
+-- works once, and is burned after 5 wrong attempts.
+CREATE TABLE IF NOT EXISTS password_resets (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  username    TEXT NOT NULL REFERENCES admin_users(username),
+  code_hash   TEXT NOT NULL,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL,
+  expires_at  TEXT NOT NULL,
+  used_at     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets (username);
 
 CREATE INDEX IF NOT EXISTS idx_orders_created ON orders (created_at);
 CREATE INDEX IF NOT EXISTS idx_payments_block_time ON payments (block_timestamp);

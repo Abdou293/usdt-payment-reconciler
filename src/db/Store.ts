@@ -82,6 +82,16 @@ export interface SessionRecord {
   expiresAt: Date;
 }
 
+export interface PasswordResetRecord {
+  id: number;
+  username: string;
+  codeHash: string;
+  attempts: number;
+  createdAt: Date;
+  expiresAt: Date;
+  usedAt: Date | null;
+}
+
 export interface Store {
   /** Run `fn` atomically: all writes succeed together or none do. */
   transaction<T>(fn: () => Promise<T>): Promise<T>;
@@ -145,6 +155,22 @@ export interface Store {
   getSession(idHash: string): Promise<SessionRecord | null>;
   deleteSession(idHash: string): Promise<void>;
   deleteExpiredSessions(now: Date): Promise<void>;
+  updateAdminPassword(username: string, passwordHash: string): Promise<void>;
+  /** Log a user out everywhere, optionally keeping one session (the current one). */
+  deleteSessionsForUser(username: string, exceptIdHash?: string): Promise<void>;
+
+  // Password reset codes (only hashes are stored)
+  createPasswordReset(r: Omit<PasswordResetRecord, 'id' | 'attempts' | 'usedAt'>): Promise<void>;
+  /** The newest unused, unexpired reset for this user, if any. */
+  getActivePasswordReset(username: string, now: Date): Promise<PasswordResetRecord | null>;
+  countRecentPasswordResets(username: string, since: Date): Promise<number>;
+  incrementPasswordResetAttempts(id: number): Promise<void>;
+  /** Mark every open reset of this user as used (after success, or when a new one is issued). */
+  closePasswordResets(username: string, at: Date): Promise<void>;
+
+  // Small key/value settings
+  getMeta(key: string): Promise<string | null>;
+  setMeta(key: string, value: string): Promise<void>;
 
   // Audit
   addAudit(entry: Omit<AuditEntry, 'id'>): Promise<void>;

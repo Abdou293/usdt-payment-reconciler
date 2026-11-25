@@ -144,6 +144,7 @@ export function buildRuntime(env: Env): Runtime {
   if (telegramEnabled && !env.TELEGRAM_ADMIN_CHAT_ID) {
     warnings.push('TELEGRAM_ADMIN_CHAT_ID not set: admin alerts (problem payments) will not be sent.');
   }
+  const telegramSender = telegramEnabled ? new GrammyTelegramSender(new Api(env.TELEGRAM_BOT_TOKEN!)) : undefined;
   const dispatcher = new NotificationDispatcher(store, {
     context: {
       telegramEnabled,
@@ -151,7 +152,7 @@ export function buildRuntime(env: Env): Runtime {
       webhookEnabled: env.WEBHOOK_URL !== undefined,
       explorer: explorerLink,
     },
-    telegram: telegramEnabled ? new GrammyTelegramSender(new Api(env.TELEGRAM_BOT_TOKEN!)) : undefined,
+    telegram: telegramSender,
     webhook: env.WEBHOOK_URL ? { url: env.WEBHOOK_URL, secret: env.WEBHOOK_SECRET! } : undefined,
   });
   const botHandlers = new BotHandlers(store, orders, {
@@ -159,7 +160,10 @@ export function buildRuntime(env: Env): Runtime {
     botUsername: env.TELEGRAM_BOT_USERNAME ?? null,
   });
 
-  const auth = new AuthService(store, () => new Date(), env.SESSION_TTL_HOURS * 60 * 60_000);
+  // Forgot-password codes go to the admin's Telegram chat (never to the browser).
+  const adminChatId = env.TELEGRAM_ADMIN_CHAT_ID;
+  const resetChannel = telegramSender && adminChatId ? (html: string) => telegramSender.sendMessage(adminChatId, html) : undefined;
+  const auth = new AuthService(store, () => new Date(), env.SESSION_TTL_HOURS * 60 * 60_000, resetChannel);
   if (env.APP_MODE !== 'demo' && !env.MERCHANT_API_KEY) warnings.push('MERCHANT_API_KEY not set: the merchant REST API is disabled.');
 
   return { env, store, config, orders, processor, networks, dispatcher, botHandlers, explorerLink, auth, simulatedChain, warnings };

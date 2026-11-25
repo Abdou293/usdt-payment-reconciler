@@ -217,6 +217,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       csrf_token: session?.csrfToken ?? null,
       mode: deps.mode,
       demo_credentials: deps.mode === 'demo' ? (deps.demoCredentials ?? null) : null,
+      password_reset_available: deps.mode !== 'demo' && deps.auth.passwordResetAvailable,
       networks: deps.networks.map((n) => ({ network: n.settings.network, label: n.label })),
     };
   });
@@ -249,6 +250,48 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   app.post('/admin/api/logout', admin, async (request, reply) => {
     await deps.auth.logout(request.cookies[cookieName]);
     reply.clearCookie(cookieName, { path: '/' });
+    return { ok: true };
+  });
+
+  // ---- Password management ----
+  // The public demo shares one account, so changing or resetting its password
+  // would lock every other visitor out: these routes are off in demo mode.
+  const notInDemo = () => {
+    if (deps.mode === 'demo') throw new HttpError(403, 'Password changes are turned off in the public demo');
+  };
+  const strictLimit = { rateLimit: { max: 5, timeWindow: '15 minutes' } };
+
+  const changeBody = z.object({ current_password: z.string().max(256), new_password: z.string().max(256) });
+  app.post('/admin/api/password', { ...admin, config: strictLimit }, async (request) => {
+    notInDemo();
+    const body = parse(changeBody, request.body);
+    const session = sessionOf(request)!;
+    const result = await deps.auth.changePassword(session.username, body.current_password, body.new_password, session.idHash);
+    if (!result.ok) throw new HttpError(result.status, result.error);
+    return { ok: true };
+  });
+
+  const forgotBody = z.object({ username: z.string().max(64) });
+  app.post('/admin/api/password/forgot', { config: strictLimit }, async (request) => {
+    notInDemo();
+    if (!deps.auth.passwordResetAvailable) throw new HttpError(404, 'Password reset by Telegram is not set up on this server');
+    const body = parse(forgotBody, request.body);
+    try {
+      await deps.auth.requestPasswordReset(body.username, `ip:${request.ip}`);
+    } catch (error) {
+      request.log.error({ err: error }, 'password reset code could not be sent');
+    }
+    // Same answer whether or not the user exists or the message was sent.
+    return { ok: true, message: 'If that account exists, a reset code was sent to the admin Telegram chat.' };
+  });
+
+  const resetBody = z.object({ username: z.string().max(64), code: z.string().max(64), new_password: z.string().max(256) });
+  app.post('/admin/api/password/reset', { config: strictLimit }, async (request) => {
+    notInDemo();
+    if (!deps.auth.passwordResetAvailable) throw new HttpError(404, 'Password reset by Telegram is not set up on this server');
+    const body = parse(resetBody, request.body);
+    const result = await deps.auth.resetPasswordWithCode(body.username, body.code, body.new_password, `ip:${request.ip}`);
+    if (!result.ok) throw new HttpError(result.status, result.error);
     return { ok: true };
   });
 

@@ -39,7 +39,7 @@ Results below are from the actual run on 2026-11-25.
 | 5 | No signing or key-handling code | `git grep` for signing / wallet / mnemonic APIs | none found |
 | 6 | Commit author emails | `git log --format=%ae` | GitHub no-reply address only |
 | 7 | Dependency vulnerabilities | `npm audit` (backend and dashboard) | 0 found in both |
-| 8 | Type safety and tests | `npm run typecheck`, `npm test` | 0 errors, 116/116 tests passed |
+| 8 | Type safety and tests | `npm run typecheck`, `npm test` | 0 errors, 127/127 tests passed |
 | 9 | USDT contracts verified on-chain | `npm run verify:contracts` | TRON mainnet, TRON Nile, Arbitrum One: PASS |
 | 10 | Live demo headers | `curl -I` on the demo URL | CSP, HSTS, nosniff, frame protection present |
 | 11 | Live demo access control | requests without a session | admin API 401; merchant API disabled (503) |

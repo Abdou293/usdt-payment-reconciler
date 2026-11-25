@@ -115,6 +115,11 @@ Full state machine and rules: [docs/state-machine.md](docs/state-machine.md).
   pre-commit hook and scans the whole folder and git history before every push.
 - Admin passwords hashed with **bcrypt**; sessions are random 256-bit ids stored only as SHA-256 hashes,
   in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie; **CSRF token** required on every change.
+- **Password management**: change password in the dashboard (needs the current password and logs out
+  every other session); **forgot password** sends a one-time code to the admin's Telegram chat (only
+  its hash is stored, 15-minute expiry, single use, burned after 5 wrong tries, at most 3 per hour, same
+  answer for unknown usernames); an **emergency reset** via `ADMIN_RESET_PASSWORD` for the server owner.
+  All of it is written to the audit log. Turned off in the public demo, where the account is shared.
 - **Rate limits** (login: 5/min, merchant API: 60/min, global: 300/min), input validation with zod,
   security headers (CSP, HSTS, no framing), 16 KB body limit.
 - Webhooks: HMAC-SHA256 over timestamp + body, constant-time comparison, 5-minute replay window.
@@ -135,10 +140,10 @@ Details and the final checklist: [SECURITY.md](SECURITY.md).
 
 ## Testing: what was actually run
 
-- **116 automated tests** (Vitest) covering money arithmetic, matching, the state machine, the full
+- **127 automated tests** (Vitest) covering money arithmetic, matching, the state machine, the full
   payment flow on the simulated chain (underpay, overpay, late, expiry, duplicates, reorgs, restart
   catch-up), notifications and webhook signatures, the HTTP API (auth, CSRF, rate limits, idempotency,
-  validation), reports and CSV export.
+  validation, password change and reset), reports and CSV export.
 - **Chain adapters** are tested against **recorded real responses** from TronGrid and an Arbitrum One
   RPC (`tests/fixtures`), with no network access during tests.
 - **Live read-only end-to-end check** (`npm run e2e:readonly`): finds a real recent USDT transfer on
@@ -181,7 +186,8 @@ real merchant install): [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 | --- | --- | --- |
 | `POST /api/v1/orders` | `Authorization: Bearer <MERCHANT_API_KEY>` | Create a payment request. Supports `Idempotency-Key`. |
 | `GET /api/v1/orders/:id` | API key | Order status and matched payments. |
-| `/admin/api/*` | Session cookie + `X-CSRF-Token` | Dashboard API: orders, review queue, reports, CSV export, health. |
+| `/admin/api/*` | Session cookie + `X-CSRF-Token` | Dashboard API: orders, review queue, reports, CSV export, health, password change. |
+| `POST /admin/api/password/forgot`, `/password/reset` | none (strict rate limit) | Forgot password: one-time code sent to the admin Telegram chat. |
 | `GET /healthz` | none | Liveness check. |
 
 ```bash

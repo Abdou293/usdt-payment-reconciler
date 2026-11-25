@@ -77,12 +77,32 @@ Set them in the host's secret settings (never in a committed file). See `.env.ex
 | `COOKIE_SECURE` | `true` | Requires HTTPS. |
 | `ADMIN_USERNAME` | `admin` | |
 | `ADMIN_INITIAL_PASSWORD` | 12+ characters, from a password manager | Used once to create the admin (stored as bcrypt). Remove it afterwards. |
+| `ADMIN_RESET_PASSWORD` | leave empty | Only if the admin is locked out: set a new password, restart, log in, then delete it. Applied once per value. |
 | `MERCHANT_API_KEY` | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` | Leave empty to disable the merchant API. |
 | `TRON_WATCH_ADDRESSES` | your **public** TRON address(es) | Comma-separated. |
 | `TRONGRID_API_KEY` | free key from trongrid.io | Optional but avoids HTTP 429. |
 | `EVM_WATCH_ADDRESSES`, `EVM_RPC_URL` | public address + RPC URL | Testnet needs `EVM_UNVERIFIED_TEST_TOKEN` (there is no official USDT on Arbitrum Sepolia). |
-| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_ADMIN_CHAT_ID` | from @BotFather | Optional. |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_ADMIN_CHAT_ID` | from @BotFather / @userinfobot | Optional. Also enables "Forgot password?" (codes go to the admin chat). |
 | `WEBHOOK_URL`, `WEBHOOK_SECRET` | your HTTPS endpoint + 32+ random characters | Optional. Verify signatures as in `examples/webhook-receiver.ts`. |
+
+### Who sets what (handing over to a client)
+
+| Item | Who enters it | Secret? |
+| --- | --- | --- |
+| Public receiving address(es) | developer or client | No: it is the address customers pay to |
+| Telegram bot token | the client, in the host's settings | **Yes** |
+| Telegram admin chat id | developer or client | No |
+| Admin password (`ADMIN_INITIAL_PASSWORD`) | the client, then changed in **Account** | **Yes** |
+| `MERCHANT_API_KEY`, `WEBHOOK_SECRET` | the client (generate with the command above) | **Yes** |
+| Wallet private key / seed phrase | **nobody, never**: the system is watch-only | - |
+
+### Lost admin password
+
+1. If Telegram is configured: **Forgot password?** on the sign-in page sends a one-time code to the
+   admin chat. Enter it with the new password. Every session is logged out.
+2. Otherwise, whoever controls the server sets `ADMIN_RESET_PASSWORD` (12+ characters) and restarts.
+   The password of `ADMIN_USERNAME` is replaced once and every session ends. Remove the variable after
+   logging in; leaving it set does not re-apply the same value on later restarts.
 
 The app validates all of this at start-up and refuses to run with a bad or placeholder value.
 It also refuses anything that looks like a private key or seed phrase in an address field.

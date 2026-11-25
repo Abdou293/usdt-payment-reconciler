@@ -37,8 +37,20 @@ if (isDemo) {
   if (await runtime.auth.ensureInitialAdmin(env.ADMIN_USERNAME, env.ADMIN_INITIAL_PASSWORD)) {
     console.log(`Created admin user "${env.ADMIN_USERNAME}". You can now remove ADMIN_INITIAL_PASSWORD from .env.`);
   }
-} else if ((await runtime.store.countAdminUsers()) === 0) {
+} else if ((await runtime.store.countAdminUsers()) === 0 && !env.ADMIN_RESET_PASSWORD) {
   console.warn('WARNING: no admin user exists and ADMIN_INITIAL_PASSWORD is not set: nobody can log in to the dashboard.');
+}
+
+if (!isDemo && env.ADMIN_RESET_PASSWORD) {
+  const r = await runtime.auth.applyEmergencyReset(env.ADMIN_USERNAME, env.ADMIN_RESET_PASSWORD);
+  console.warn(
+    r === 'applied'
+      ? `Password of "${env.ADMIN_USERNAME}" was reset from ADMIN_RESET_PASSWORD and all sessions were ended. Remove ADMIN_RESET_PASSWORD now.`
+      : 'ADMIN_RESET_PASSWORD was already applied earlier and was ignored. Remove it from the settings.',
+  );
+}
+if (!isDemo) {
+  console.log(`Forgot-password by Telegram: ${runtime.auth.passwordResetAvailable ? 'enabled' : 'disabled (needs TELEGRAM_BOT_TOKEN and TELEGRAM_ADMIN_CHAT_ID)'}`);
 }
 
 // ---- Demo data ----

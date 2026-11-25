@@ -106,6 +106,11 @@ label.inline { flex-direction: row; align-items: center; gap: 6px; }
 .reason-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .reason-form input { min-width: 220px; flex: 1; }
 .login { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px; padding: 26px; }
+.link-btn { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; color: var(--accent); cursor: pointer; align-self: flex-start; }
+.link-btn:hover { text-decoration: underline; }
+.narrow { max-width: 460px; display: flex; flex-direction: column; gap: 16px; }
+.login-title { margin: 0; font-size: 17px; }
+.stack-form { display: flex; flex-direction: column; gap: 12px; }
 .demo-note { background: var(--info-bg); color: var(--info); border-radius: 8px; padding: 10px 12px; margin: 0; font-size: 13px; line-height: 1.5; }
 
 /* Buttons */
