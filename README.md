@@ -21,4 +21,20 @@ npm install        # also enables the gitleaks pre-commit hook
 npm run typecheck
 npm test
 npm run scan:all   # secret scan of the folder and the full git history
+
+npm run verify:contracts   # check USDT contract addresses on-chain (read-only)
+npm run e2e:readonly       # live end-to-end check on public chain data, no funds
+npm run record:fixtures    # re-record real chain responses used by adapter tests
+npm run watch              # run the chain watchers using your .env
 ```
+
+## Verified USDT contracts
+
+| Network | Contract | Official source |
+|---|---|---|
+| TRON mainnet | `TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t` | [tether.to](https://tether.to/en/supported-protocols/) |
+| TRON Nile (testnet) | `TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf` | [Nile faucet](https://nileex.io/join/getJoinPage) |
+| Arbitrum One (USD₮0) | `0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9` | [USDT0 docs](https://docs.usdt0.to/technical-documentation/deployments) |
+| Arbitrum Sepolia | none — no official deployment exists | — |
+
+All are checked on-chain (contract code, name, symbol, decimals) by `npm run verify:contracts`.

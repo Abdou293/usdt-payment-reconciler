@@ -1,0 +1,89 @@
+{
+  "note": "Public on-chain data recorded read-only for offline adapter tests. No keys, no funds.",
+  "recordedAt": "2026-11-25T21:26:44.034Z",
+  "sample": {
+    "txHash": "cb3357a3da8867d4111b52037b016d8b69aa2adde7d38470ea368aed96fc69ed",
+    "blockNumber": 88322562,
+    "toAddress": "TXYiK8BJMVvRcvjAduADrfvduWBtwgPFdE",
+    "amountUnits": "258000000",
+    "logIndex": 0,
+    "amount": "258.000000"
+  },
+  "query": {
+    "fromBlock": 88322562,
+    "toBlock": 88322562,
+    "tokenContract": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+    "toAddresses": [
+      "TXYiK8BJMVvRcvjAduADrfvduWBtwgPFdE"
+    ]
+  },
+  "expected": {
+    "eventCount": 1,
+    "canonical": true
+  },
+  "responses": {
+    "POST https://api.trongrid.io/wallet/getblockbynum {\"num\":88322562}": {
+      "block_header": {
+        "raw_data": {
+          "timestamp": 1795641930000,
+          "txTrieRoot": "dfc9541c5d90ce47930809c265e5b5d12d671f64cb46d74c7659798cfb1025aa",
+          "parentHash": "000000000543b201ac122e7ac41179f7c39437d681902e6e9aaf4f6ab96f7a5d",
+          "number": 88322562,
+          "witness_address": "4170df4a99c7e3e249b290b43e11eb2368afd59899",
+          "version": 39
+        },
+        "witness_signature": "de6b1e457f5199480fdb0f9ec4715e8dbd73b00f967c766070b7d1a4c273fae24d57c32cecf980840cc4827387a8a6a020df141002e792a61d50c952f3939d6201"
+      }
+    },
+    "GET https://api.trongrid.io/v1/accounts/TXYiK8BJMVvRcvjAduADrfvduWBtwgPFdE/transactions/trc20?only_to=true&contract_address=TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t&min_timestamp=1795641930000&max_timestamp=1795641930000&limit=200&order_by=block_timestamp%2Casc": {
+      "data": [
+        {
+          "transaction_id": "cb3357a3da8867d4111b52037b016d8b69aa2adde7d38470ea368aed96fc69ed",
+          "token_info": {
+            "symbol": "USDT",
+            "address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+            "decimals": 6,
+            "name": "Tether USD"
+          },
+          "block_timestamp": 1795641930000,
+          "from": "TTU4bhRuPEtaSWPXvvRQ7CVnyHs6cGu24e",
+          "to": "TXYiK8BJMVvRcvjAduADrfvduWBtwgPFdE",
+          "type": "Transfer",
+          "value": "258000000"
+        }
+      ],
+      "success": true,
+      "meta": {
+        "at": 1795641992419,
+        "page_size": 1
+      }
+    },
+    "POST https://api.trongrid.io/wallet/gettransactioninfobyid {\"value\":\"cb3357a3da8867d4111b52037b016d8b69aa2adde7d38470ea368aed96fc69ed\"}": {
+      "id": "cb3357a3da8867d4111b52037b016d8b69aa2adde7d38470ea368aed96fc69ed",
+      "blockNumber": 88322562,
+      "blockTimeStamp": 1795641930000,
+      "contractResult": [
+        "0000000000000000000000000000000000000000000000000000000000000000"
+      ],
+      "contract_address": "41a614f803b6fd780986a42c78ec9c7f77e6ded13c",
+      "receipt": {
+        "energy_usage": 64285,
+        "energy_usage_total": 64285,
+        "net_usage": 345,
+        "result": "SUCCESS",
+        "energy_penalty_total": 49635
+      },
+      "log": [
+        {
+          "address": "a614f803b6fd780986a42c78ec9c7f77e6ded13c",
+          "topics": [
+            "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "000000000000000000000000bfef2fdaa95b62d7e53e0afd3eb34765dab9db54",
+            "000000000000000000000000ecb0d6104554cbd4c51f298d1183d47f459c4356"
+          ],
+          "data": "000000000000000000000000000000000000000000000000000000000f60c480"
+        }
+      ]
+    }
+  }
+}

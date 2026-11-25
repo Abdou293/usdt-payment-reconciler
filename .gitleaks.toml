@@ -23,5 +23,12 @@ regex = '''(?i)(?:mnemonic|seed[_-]?phrase|recovery[_-]?phrase)["'\s:=]{1,5}["']
 keywords = ["mnemonic", "seed", "recovery"]
 
 [allowlist]
-description = "Placeholders in the example env file are allowed"
+description = "Placeholders in .env.example, and the PUBLIC USDT contract addresses (verified on-chain; not secrets)"
 paths = ['''\.env\.example$''']
+# Exact public contract addresses only. Each was flagged by generic-api-key
+# because it appears in a field named "tokenContract". Nothing broader is allowed.
+regexes = [
+  '''^TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t$''',
+  '''^TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf$''',
+  '''^0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9$''',
+]
