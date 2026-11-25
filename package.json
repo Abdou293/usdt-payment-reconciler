@@ -1,0 +1,32 @@
+{
+  "name": "usdt-payment-reconciler",
+  "version": "0.1.0",
+  "description": "Non-custodial, watch-only USDT payment verification and reconciliation system (TRON TRC20 + EVM). Portfolio project.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "scan:secrets": "gitleaks dir . --config .gitleaks.toml --redact --no-banner",
+    "scan:history": "gitleaks git . --config .gitleaks.toml --redact --no-banner",
+    "scan:all": "npm run scan:secrets && npm run scan:history"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.10",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.2"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

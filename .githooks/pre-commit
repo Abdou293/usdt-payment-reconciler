@@ -1,0 +1,19 @@
+#!/bin/sh
+# Pre-commit hook: block the commit if gitleaks finds a secret in staged changes.
+# Activated by `npm install` (the "prepare" script sets core.hooksPath=.githooks).
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "ERROR: gitleaks is not installed. Commit blocked for safety."
+  echo "Install it with: winget install --id Gitleaks.Gitleaks -e"
+  exit 1
+fi
+
+gitleaks git --pre-commit --staged --redact --config .gitleaks.toml --no-banner
+status=$?
+if [ $status -ne 0 ]; then
+  echo ""
+  echo "COMMIT BLOCKED: gitleaks found a possible secret in your staged changes."
+  echo "Remove it, move it to .env, and rotate the key if it was ever real."
+  exit 1
+fi
+exit 0

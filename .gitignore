@@ -1,0 +1,42 @@
+# ---- Secrets: NEVER commit these ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+secrets/
+credentials*.json
+
+# ---- Dependencies & build output ----
+node_modules/
+dist/
+build/
+coverage/
+.next/
+.vite/
+*.tsbuildinfo
+
+# ---- Local databases (may contain real order data) ----
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+data/
+
+# ---- Logs & reports ----
+*.log
+npm-debug.log*
+gitleaks-report*.json
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/*
+!.vscode/extensions.json
+.idea/
