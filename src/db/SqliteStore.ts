@@ -9,6 +9,9 @@ import { unitsFromDb } from '../core/money.js';
 import type { Network, Order, OrderStatus, Payment, PaymentStatus, Token } from '../core/types.js';
 import { SCHEMA_SQL, SCHEMA_VERSION } from './schema.js';
 import type {
+  AdminUser,
+  OrderFilter,
+  SessionRecord,
   AuditEntry,
   ChainState,
   Delivery,
@@ -322,6 +325,107 @@ export class SqliteStore implements Store {
       .prepare(`SELECT * FROM deliveries WHERE status IN (${placeholders}) ORDER BY id DESC LIMIT ?`)
       .all(...statuses, limit) as Row[];
     return rows.map(toDelivery);
+  }
+
+  async countDeliveriesByStatus(): Promise<Record<DeliveryStatus, number>> {
+    const rows = this.db.prepare('SELECT status, COUNT(*) AS n FROM deliveries GROUP BY status').all() as Row[];
+    const out: Record<DeliveryStatus, number> = { pending: 0, sent: 0, failed: 0 };
+    for (const r of rows) out[String(r.status) as DeliveryStatus] = Number(r.n);
+    return out;
+  }
+
+  // ---------- Dashboard queries ----------
+
+  async listOrders(f: OrderFilter): Promise<{ items: Order[]; total: number }> {
+    const where: string[] = [];
+    const params: SQLInputValue[] = [];
+    if (f.statuses && f.statuses.length > 0) {
+      where.push(`status IN (${f.statuses.map(() => '?').join(', ')})`);
+      params.push(...f.statuses);
+    }
+    if (f.network) {
+      where.push('network = ?');
+      params.push(f.network);
+    }
+    if (f.createdFrom) {
+      where.push('created_at >= ?');
+      params.push(f.createdFrom.toISOString());
+    }
+    if (f.createdTo) {
+      where.push('created_at < ?');
+      params.push(f.createdTo.toISOString());
+    }
+    if (f.search) {
+      const term = f.search.trim();
+      where.push(
+        `(id = ? OR external_ref = ? OR lower(receiving_address) = lower(?)
+          OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = orders.id AND lower(p.tx_hash) = lower(?)))`,
+      );
+      params.push(term, term, term, term);
+    }
+    const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const total = Number((this.db.prepare(`SELECT COUNT(*) AS n FROM orders ${clause}`).get(...params) as Row).n);
+    const rows = this.db
+      .prepare(`SELECT * FROM orders ${clause} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+      .all(...params, f.limit, f.offset) as Row[];
+    return { items: rows.map(toOrder), total };
+  }
+
+  async listOrdersCreatedBetween(from: Date, to: Date): Promise<Order[]> {
+    const rows = this.db
+      .prepare('SELECT * FROM orders WHERE created_at >= ? AND created_at < ? ORDER BY created_at')
+      .all(from.toISOString(), to.toISOString()) as Row[];
+    return rows.map(toOrder);
+  }
+
+  async listPaymentsBetween(from: Date, to: Date): Promise<Payment[]> {
+    const rows = this.db
+      .prepare('SELECT * FROM payments WHERE block_timestamp >= ? AND block_timestamp < ? ORDER BY block_timestamp, id')
+      .all(from.toISOString(), to.toISOString()) as Row[];
+    return rows.map(toPayment);
+  }
+
+  // ---------- Admin accounts and sessions ----------
+
+  async getAdminUser(username: string): Promise<AdminUser | null> {
+    const row = this.db.prepare('SELECT * FROM admin_users WHERE username = ?').get(username) as Row | undefined;
+    return row ? { username: String(row.username), passwordHash: String(row.password_hash) } : null;
+  }
+
+  async createAdminUser(username: string, passwordHash: string, at: Date): Promise<void> {
+    this.db
+      .prepare('INSERT INTO admin_users (username, password_hash, created_at) VALUES (?, ?, ?)')
+      .run(username, passwordHash, at.toISOString());
+  }
+
+  async countAdminUsers(): Promise<number> {
+    return Number((this.db.prepare('SELECT COUNT(*) AS n FROM admin_users').get() as Row).n);
+  }
+
+  async createSession(s: SessionRecord): Promise<void> {
+    this.db
+      .prepare('INSERT INTO sessions (id_hash, username, csrf_token, created_at, expires_at) VALUES (?, ?, ?, ?, ?)')
+      .run(s.idHash, s.username, s.csrfToken, s.createdAt.toISOString(), s.expiresAt.toISOString());
+  }
+
+  async getSession(idHash: string): Promise<SessionRecord | null> {
+    const row = this.db.prepare('SELECT * FROM sessions WHERE id_hash = ?').get(idHash) as Row | undefined;
+    if (!row) return null;
+    return {
+      idHash: String(row.id_hash),
+      username: String(row.username),
+      csrfToken: String(row.csrf_token),
+      createdAt: new Date(String(row.created_at)),
+      expiresAt: new Date(String(row.expires_at)),
+    };
+  }
+
+  async deleteSession(idHash: string): Promise<void> {
+    this.db.prepare('DELETE FROM sessions WHERE id_hash = ?').run(idHash);
+  }
+
+  async deleteExpiredSessions(now: Date): Promise<void> {
+    this.db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now.toISOString());
   }
 
   // ---------- Audit ----------

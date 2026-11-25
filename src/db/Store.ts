@@ -19,7 +19,7 @@ export interface ChainState {
 
 export interface AuditEntry {
   id?: number;
-  entityType: 'order' | 'payment' | 'chain';
+  entityType: 'order' | 'payment' | 'chain' | 'admin';
   entityId: string;
   action: string;
   fromStatus: string | null;
@@ -57,6 +57,30 @@ export interface Delivery {
 }
 
 export type NewDelivery = Pick<Delivery, 'eventId' | 'channel' | 'target' | 'dedupeKey' | 'body' | 'nextAttemptAt' | 'createdAt'>;
+
+export interface OrderFilter {
+  statuses?: readonly OrderStatus[] | undefined;
+  network?: Network | undefined;
+  /** Matches order id, merchant reference, receiving address or a payment tx hash. */
+  search?: string | undefined;
+  createdFrom?: Date | undefined;
+  createdTo?: Date | undefined;
+  limit: number;
+  offset: number;
+}
+
+export interface AdminUser {
+  username: string;
+  passwordHash: string;
+}
+
+export interface SessionRecord {
+  idHash: string;
+  username: string;
+  csrfToken: string;
+  createdAt: Date;
+  expiresAt: Date;
+}
 
 export interface Store {
   /** Run `fn` atomically: all writes succeed together or none do. */
@@ -104,6 +128,23 @@ export interface Store {
   markDeliveryRetry(id: number, attempts: number, nextAttemptAt: Date, error: string): Promise<void>;
   markDeliveryFailed(id: number, attempts: number, error: string): Promise<void>;
   listDeliveries(statuses: readonly DeliveryStatus[], limit: number): Promise<Delivery[]>;
+
+  countDeliveriesByStatus(): Promise<Record<DeliveryStatus, number>>;
+
+  // Dashboard queries and reports
+  listOrders(filter: OrderFilter): Promise<{ items: Order[]; total: number }>;
+  listOrdersCreatedBetween(from: Date, to: Date): Promise<Order[]>;
+  /** Payments by on-chain block time. */
+  listPaymentsBetween(from: Date, to: Date): Promise<Payment[]>;
+
+  // Admin accounts and sessions
+  getAdminUser(username: string): Promise<AdminUser | null>;
+  createAdminUser(username: string, passwordHash: string, at: Date): Promise<void>;
+  countAdminUsers(): Promise<number>;
+  createSession(session: SessionRecord): Promise<void>;
+  getSession(idHash: string): Promise<SessionRecord | null>;
+  deleteSession(idHash: string): Promise<void>;
+  deleteExpiredSessions(now: Date): Promise<void>;
 
   // Audit
   addAudit(entry: Omit<AuditEntry, 'id'>): Promise<void>;

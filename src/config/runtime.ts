@@ -16,6 +16,7 @@ import { GrammyTelegramSender } from '../notifications/GrammyTelegramSender.js';
 import type { ExplorerLink } from '../notifications/messages.js';
 import { NotificationDispatcher } from '../notifications/NotificationDispatcher.js';
 import { ChainWatcher } from '../workers/ChainWatcher.js';
+import { AuthService } from '../http/auth.js';
 import type { Env } from './env.js';
 
 export interface NetworkRuntime {
@@ -35,6 +36,9 @@ export interface Runtime {
   dispatcher: NotificationDispatcher;
   botHandlers: BotHandlers;
   explorerLink: ExplorerLink;
+  auth: AuthService;
+  /** Only in demo mode: the in-memory simulated chain. */
+  simulatedChain: SimulatedChainAdapter | null;
   warnings: string[];
 }
 
@@ -43,12 +47,14 @@ export const DEMO_ADDRESSES = ['SIM-DEMO-ADDRESS-1', 'SIM-DEMO-ADDRESS-2'];
 export function buildRuntime(env: Env): Runtime {
   const store = new SqliteStore(env.DATABASE_URL);
   const warnings: string[] = [];
+  let simulatedChain: SimulatedChainAdapter | null = null;
   const pending: Array<{ settings: WatchedNetwork; adapter: ChainAdapter; label: string; startBlock?: number | undefined; maxBlocks: number }> = [];
 
   if (env.APP_MODE === 'demo') {
+    simulatedChain = new SimulatedChainAdapter();
     pending.push({
       settings: { network: 'simulated', usdtContract: SIMULATED_USDT_CONTRACT, requiredConfirmations: 3, watchAddresses: DEMO_ADDRESSES },
-      adapter: new SimulatedChainAdapter(),
+      adapter: simulatedChain,
       label: 'Simulated chain (demo mode, no real funds)',
       maxBlocks: 1000,
     });
@@ -153,5 +159,8 @@ export function buildRuntime(env: Env): Runtime {
     botUsername: env.TELEGRAM_BOT_USERNAME ?? null,
   });
 
-  return { env, store, config, orders, processor, networks, dispatcher, botHandlers, explorerLink, warnings };
+  const auth = new AuthService(store, () => new Date(), env.SESSION_TTL_HOURS * 60 * 60_000);
+  if (env.APP_MODE !== 'demo' && !env.MERCHANT_API_KEY) warnings.push('MERCHANT_API_KEY not set: the merchant REST API is disabled.');
+
+  return { env, store, config, orders, processor, networks, dispatcher, botHandlers, explorerLink, auth, simulatedChain, warnings };
 }

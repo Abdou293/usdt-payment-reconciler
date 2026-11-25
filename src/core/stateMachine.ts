@@ -17,18 +17,20 @@ const ALLOWED: Record<OrderStatus, readonly OrderStatus[]> = {
   expired: ['detected', 'confirming', 'confirmed', 'underpaid', 'overpaid', 'late_payment'],
   late_payment: [],
   confirmed: [],
+  cancelled: [],
 };
 
 /** Transitions only a human admin may perform (manual review queue). */
 const MANUAL_ONLY: Record<OrderStatus, readonly OrderStatus[]> = {
-  pending: [],
+  pending: ['cancelled'],
   detected: [],
   confirming: [],
-  underpaid: ['confirmed'],
-  overpaid: ['confirmed'],
-  late_payment: ['confirmed'],
+  underpaid: ['confirmed', 'cancelled'],
+  overpaid: ['confirmed', 'cancelled'],
+  late_payment: ['confirmed', 'cancelled'],
   expired: [],
   confirmed: [],
+  cancelled: [],
 };
 
 export type Actor = 'system' | 'admin';
@@ -44,6 +46,6 @@ export function assertTransition(from: OrderStatus, to: OrderStatus, actor: Acto
   }
 }
 
-export const FINAL_STATUSES: readonly OrderStatus[] = ['confirmed'];
+export const FINAL_STATUSES: readonly OrderStatus[] = ['confirmed', 'cancelled'];
 export const REVIEW_STATUSES: readonly OrderStatus[] = ['underpaid', 'overpaid', 'late_payment'];
 export const OPEN_STATUSES: readonly OrderStatus[] = ['pending', 'detected', 'confirming'];

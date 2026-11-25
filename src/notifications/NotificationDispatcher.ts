@@ -66,6 +66,21 @@ export class NotificationDispatcher {
     }
   }
 
+  /**
+   * Move the event cursor past every existing event without sending anything.
+   * Used after seeding demo history so old events do not notify anyone.
+   */
+  async skipExistingEvents(): Promise<number> {
+    let skipped = 0;
+    for (;;) {
+      const cursor = Number((await this.store.getKv(CURSOR_KEY)) ?? '0');
+      const events = await this.store.listEventsAfter(cursor, 500);
+      if (events.length === 0) return skipped;
+      skipped += events.length;
+      await this.store.setKv(CURSOR_KEY, String(events.at(-1)!.id));
+    }
+  }
+
   private async fanOut(): Promise<number> {
     let planned = 0;
     for (;;) {

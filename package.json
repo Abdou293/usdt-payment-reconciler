@@ -22,7 +22,11 @@
     "watch": "npm run dev",
     "verify:contracts": "tsx scripts/verify-token-contracts.ts",
     "record:fixtures": "tsx scripts/record-fixtures.ts",
-    "e2e:readonly": "tsx scripts/e2e-readonly.ts"
+    "e2e:readonly": "tsx scripts/e2e-readonly.ts",
+    "dashboard:install": "npm --prefix dashboard ci",
+    "dashboard:dev": "npm --prefix dashboard run dev",
+    "dashboard:build": "npm --prefix dashboard run build",
+    "build:all": "npm run build && npm run dashboard:build"
   },
   "devDependencies": {
     "@types/node": "^26.6.10",
@@ -34,6 +38,12 @@
     "esbuild@0.28.2": true
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.5",
+    "@fastify/helmet": "^13.2.0",
+    "@fastify/rate-limit": "^11.3.0",
+    "@fastify/static": "^10.1.12",
+    "bcryptjs": "^3.0.3",
+    "fastify": "^5.12.8",
     "grammy": "^1.48.0",
     "zod": "^4.6.7"
   }

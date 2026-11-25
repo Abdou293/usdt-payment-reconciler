@@ -1,7 +1,7 @@
 // A fake blockchain for tests and demo mode. No wallet, API key or money.
 // You "send" transfers, "mine" blocks, and can even trigger a reorganization.
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { sameAddress } from '../../core/matcher.js';
 import type { Network, TransferEvent } from '../../core/types.js';
 import type { ChainAdapter, TransferQuery } from '../ChainAdapter.js';
@@ -34,6 +34,10 @@ export class SimulatedChainAdapter implements ChainAdapter {
   private mempool: PendingTransfer[] = [];
   private readonly now: () => Date;
   private txCounter = 0;
+  /** Makes tx hashes unique per chain instance (a restart or the demo seed must never reuse one). */
+  private readonly instanceId = randomUUID();
+  /** Transfers dropped by a reorg (and not re-included yet). */
+  private readonly removed = new Set<string>();
 
   constructor(options: SimulatedChainOptions = {}) {
     this.network = options.network ?? 'simulated';
@@ -44,7 +48,7 @@ export class SimulatedChainAdapter implements ChainAdapter {
   /** Queue a transfer; it lands on-chain at the next `mine()`. Returns its tx hash. */
   sendTransfer(params: { toAddress: string; amount: bigint; fromAddress?: string; tokenContract?: string; txHash?: string }): string {
     this.txCounter += 1;
-    const txHash = params.txHash ?? fakeHash(`tx-${this.txCounter}`);
+    const txHash = params.txHash ?? fakeHash(`${this.instanceId}-tx-${this.txCounter}`);
     this.mempool.push({
       toAddress: params.toAddress,
       amount: params.amount,
@@ -74,6 +78,7 @@ export class SimulatedChainAdapter implements ChainAdapter {
         }),
       );
       this.mempool = [];
+      for (const t of transfers) this.removed.delete(`${t.txHash}:${t.logIndex}`);
       this.blocks.push({ number, timestamp, transfers });
     }
   }
@@ -85,6 +90,7 @@ export class SimulatedChainAdapter implements ChainAdapter {
   reorg(depth: number, reinclude = false): void {
     if (depth >= this.blocks.length) throw new Error('Reorg deeper than simulated chain');
     const removed = this.blocks.splice(this.blocks.length - depth, depth);
+    for (const block of removed) for (const t of block.transfers) this.removed.add(`${t.txHash}:${t.logIndex}`);
     if (reinclude) {
       for (const block of removed) {
         for (const t of block.transfers) {
@@ -107,8 +113,20 @@ export class SimulatedChainAdapter implements ChainAdapter {
       .map((t) => ({ ...t }));
   }
 
+  /**
+   * Move the tip forward to `blockNumber` (an empty block). Used in demo mode
+   * after a restart so the in-memory chain continues from the saved cursor.
+   */
+  fastForwardTo(blockNumber: number): void {
+    if (blockNumber > this.tip().number) this.blocks.push({ number: blockNumber, timestamp: this.now(), transfers: [] });
+  }
+
   async isTransferCanonical(txHash: string, logIndex: number): Promise<boolean> {
-    return this.blocks.some((b) => b.transfers.some((t) => t.txHash === txHash && t.logIndex === logIndex));
+    if (this.blocks.some((b) => b.transfers.some((t) => t.txHash === txHash && t.logIndex === logIndex))) return true;
+    if (this.removed.has(`${txHash}:${logIndex}`)) return false;
+    // Unknown to this in-memory chain: it was mined before a restart (demo
+    // history), so treat it as canonical. Real adapters ask the real chain.
+    return true;
   }
 
   explorerTxUrl(txHash: string): string {

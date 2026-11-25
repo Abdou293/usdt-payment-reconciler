@@ -1,7 +1,7 @@
 // SQL schema. Amounts are stored as TEXT holding integer base units
 // (never REAL/float). Dates are ISO-8601 TEXT in UTC.
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -109,4 +109,25 @@ CREATE TABLE IF NOT EXISTS kv (
   key    TEXT PRIMARY KEY,
   value  TEXT NOT NULL
 );
+
+-- v3: admin accounts and server-side sessions.
+-- Passwords are stored ONLY as bcrypt hashes. Session ids are stored ONLY as
+-- SHA-256 hashes, so a leaked database cannot be used to hijack a session.
+CREATE TABLE IF NOT EXISTS admin_users (
+  username       TEXT PRIMARY KEY,
+  password_hash  TEXT NOT NULL,
+  created_at     TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id_hash     TEXT PRIMARY KEY,
+  username    TEXT NOT NULL REFERENCES admin_users(username),
+  csrf_token  TEXT NOT NULL,
+  created_at  TEXT NOT NULL,
+  expires_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions (expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_orders_created ON orders (created_at);
+CREATE INDEX IF NOT EXISTS idx_payments_block_time ON payments (block_timestamp);
 `;

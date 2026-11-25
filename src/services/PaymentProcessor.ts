@@ -264,6 +264,32 @@ export class PaymentProcessor {
     });
   }
 
+  /** Admin closes an order (e.g. refunded off-system, or an unpaid order no longer wanted). */
+  async cancelOrderManually(orderId: string, admin: string, reason: string): Promise<void> {
+    if (!reason.trim()) throw new Error('A reason is required to cancel an order');
+    await this.inTransaction(async () => {
+      const order = await this.requireOrder(orderId);
+      assertTransition(order.status, 'cancelled', 'admin');
+      await this.store.updateOrderStatus(order.id, 'cancelled', true);
+      await this.audit('order', order.id, 'manual_cancel', order.status, 'cancelled', `admin:${admin}`, { reason });
+      await this.queueStatusChange({ ...order, status: 'cancelled', manuallyResolved: true }, order.status, 'cancelled', `admin:${admin}`);
+    });
+  }
+
+  /** Admin closes an unmatched / wrong-token payment that belongs to no order. */
+  async dismissPaymentManually(paymentId: number, admin: string, reason: string): Promise<void> {
+    if (!reason.trim()) throw new Error('A reason is required to dismiss a payment');
+    await this.inTransaction(async () => {
+      const payment = await this.store.getPayment(paymentId);
+      if (!payment) throw new Error(`Payment ${paymentId} not found`);
+      if (payment.status !== 'unmatched' && payment.status !== 'wrong_token') {
+        throw new Error(`Only unmatched or wrong-token payments can be dismissed (is ${payment.status})`);
+      }
+      await this.store.updatePayment(payment.id, { status: 'dismissed', note: `${payment.note ?? ''} | dismissed: ${reason}`.slice(0, 500) });
+      await this.audit('payment', String(payment.id), 'manual_dismiss', payment.status, 'dismissed', `admin:${admin}`, { reason });
+    });
+  }
+
   // ------------------------------------------------------------------
   // Internals
   // ------------------------------------------------------------------
@@ -315,7 +341,7 @@ export class PaymentProcessor {
   }
 
   private async audit(
-    entityType: 'order' | 'payment',
+    entityType: 'order' | 'payment' | 'admin',
     entityId: string,
     action: string,
     fromStatus: string | null,

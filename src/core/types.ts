@@ -13,6 +13,7 @@ export const ORDER_STATUSES = [
   'overpaid', //      confirmed but total paid is above tolerance (needs review)
   'expired', //       no payment arrived before the expiry time
   'late_payment', //  a payment arrived after the expiry time (needs review)
+  'cancelled', //     closed by an admin (e.g. refunded off-system), with a written reason
 ] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
@@ -22,6 +23,7 @@ export const PAYMENT_STATUSES = [
   'unmatched', //     no order could be identified (needs review)
   'wrong_token', //   transfer of a token other than the configured USDT contract
   'orphaned', //      removed from the canonical chain by a reorganization
+  'dismissed', //     reviewed by an admin and closed (e.g. refunded), with a written reason
 ] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 

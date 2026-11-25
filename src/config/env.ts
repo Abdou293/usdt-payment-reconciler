@@ -49,6 +49,11 @@ function isAllowedWebhookUrl(value: string): boolean {
   }
 }
 
+const booleanString = z
+  .enum(['true', 'false', ''])
+  .optional()
+  .transform((s) => (s === 'true' ? true : s === 'false' ? false : undefined));
+
 const amountUnits = z
   .string()
   .default('0')
@@ -64,6 +69,17 @@ export const envSchema = z.object({
     .default('file:./data/app.db')
     .refine((s) => s.startsWith('file:'), 'only file: (SQLite) URLs are supported for now')
     .transform((s) => s.slice('file:'.length)),
+
+  // ---- Admin dashboard + merchant API ----
+  ADMIN_USERNAME: z.string().regex(/^[a-zA-Z0-9_.-]{3,32}$/, '3-32 letters, digits, . _ -').default('admin'),
+  /** Only used once, to create the first admin (stored as a bcrypt hash). */
+  ADMIN_INITIAL_PASSWORD: secretString.refine((s) => s === undefined || (s.length >= 12 && s.length <= 128), 'must be 12-128 characters'),
+  /** Public demo login (APP_MODE=demo only). Shown on the login page on purpose. */
+  DEMO_ADMIN_PASSWORD: z.string().min(12).max(128).default('demo-password-2026'),
+  SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(168).default(8),
+  COOKIE_SECURE: booleanString,
+  TRUST_PROXY: booleanString,
+  MERCHANT_API_KEY: secretString.refine((s) => s === undefined || s.length >= 32, 'must be at least 32 characters'),
 
   POLL_INTERVAL_SECONDS: z.coerce.number().int().min(5).max(3600).default(30),
 

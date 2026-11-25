@@ -11,7 +11,7 @@ export interface PaymentView {
 }
 
 /** Statuses the automatic system never leaves on its own. */
-const SYSTEM_TERMINAL: readonly OrderStatus[] = ['confirmed', 'overpaid', 'late_payment'];
+const SYSTEM_TERMINAL: readonly OrderStatus[] = ['confirmed', 'overpaid', 'late_payment', 'cancelled'];
 
 export function deriveOrderStatus(
   order: Order,

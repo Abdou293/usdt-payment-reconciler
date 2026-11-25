@@ -78,6 +78,8 @@ export function payerMessage(p: StatusPayload, explorer: ExplorerLink): string |
       return `⚠️ Your payment for order${ref} arrived after the order expired. The merchant will review it.${links}`;
     case 'expired':
       return `⌛ Order${ref} expired without a payment. Please do not send funds for it; ask the merchant for a new payment request.`;
+    case 'cancelled':
+      return `Order${ref} was closed by the merchant. Please contact the merchant about any payment you made.`;
     default:
       return null;
   }
