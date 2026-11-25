@@ -108,7 +108,7 @@ export class PaymentProcessor {
     });
 
     if (status === 'unmatched' || status === 'wrong_token') {
-      this.queueReview({
+      await this.queueReview({
         kind: status === 'wrong_token' ? 'wrong_token' : 'unmatched_payment',
         message: `${formatAmount(event.amount)} received on ${event.network} (${event.txHash}): ${note ?? status}`,
         orderId: null,
@@ -204,7 +204,7 @@ export class PaymentProcessor {
       if (order && ['confirmed', 'overpaid', 'late_payment'].includes(order.status)) {
         // Should not happen once N confirmations are reached, but if it does a human must look.
         await this.audit('order', order.id, 'reorg_after_final', order.status, order.status, 'system', { paymentId: payment.id });
-        this.queueReview({
+        await this.queueReview({
           kind: 'reorg_after_final',
           message: `CRITICAL: payment ${txHash} for ${order.status} order ${order.id} was removed by a chain reorganization`,
           orderId: order.id,
@@ -243,7 +243,7 @@ export class PaymentProcessor {
       assertTransition(order.status, 'confirmed', 'admin');
       await this.store.updateOrderStatus(order.id, 'confirmed', true);
       await this.audit('order', order.id, 'manual_accept', order.status, 'confirmed', `admin:${admin}`, { reason });
-      this.queueStatusChange({ ...order, status: 'confirmed', manuallyResolved: true }, order.status, 'confirmed', `admin:${admin}`);
+      await this.queueStatusChange({ ...order, status: 'confirmed', manuallyResolved: true }, order.status, 'confirmed', `admin:${admin}`);
     });
   }
 
@@ -291,9 +291,9 @@ export class PaymentProcessor {
       paidTotal: formatAmount(views.reduce((s, v) => s + v.amount, 0n)),
       payable: formatAmount(order.payableAmount),
     });
-    this.queueStatusChange({ ...order, status: target }, order.status, target, 'system');
+    await this.queueStatusChange({ ...order, status: target }, order.status, target, 'system');
     if (REVIEW_STATUSES.includes(target)) {
-      this.queueReview({
+      await this.queueReview({
         kind: 'order_needs_review',
         message: `Order ${order.id} is ${target} and needs manual review`,
         orderId: order.id,
@@ -326,14 +326,40 @@ export class PaymentProcessor {
     await this.store.addAudit({ entityType, entityId, action, fromStatus, toStatus, actor, details, createdAt: this.now() });
   }
 
-  private queueStatusChange(order: Order, from: OrderStatus, to: OrderStatus, actor: string): void {
+  /**
+   * Record the change as a durable event (same DB transaction as the status
+   * change) for the notification dispatcher, and queue in-process listeners.
+   */
+  private async queueStatusChange(order: Order, from: OrderStatus, to: OrderStatus, actor: string): Promise<void> {
+    const payments = (await this.store.listPaymentsForOrder(order.id)).filter((p) => p.status === 'matched');
+    await this.store.addEvent(
+      'order_status_changed',
+      {
+        orderId: order.id,
+        from,
+        to,
+        actor,
+        network: order.network,
+        externalRef: order.externalRef,
+        receivingAddress: order.receivingAddress,
+        baseAmount: formatAmount(order.baseAmount),
+        payableAmount: formatAmount(order.payableAmount),
+        paidTotal: formatAmount(payments.reduce((s, p) => s + p.amount, 0n)),
+        txHashes: payments.map((p) => p.txHash),
+        expiresAt: order.expiresAt.toISOString(),
+        payerTelegramChatId: order.payerTelegramChatId,
+        manuallyResolved: order.manuallyResolved,
+      },
+      this.now(),
+    );
     const event: OrderStatusChange = { order, from, to, actor };
     this.outbox.push(async () => {
       for (const listener of this.statusListeners) await listener(event);
     });
   }
 
-  private queueReview(alert: ReviewAlert): void {
+  private async queueReview(alert: ReviewAlert): Promise<void> {
+    await this.store.addEvent('review_alert', { ...alert }, this.now());
     this.outbox.push(async () => {
       for (const listener of this.reviewListeners) await listener(alert);
     });

@@ -1,7 +1,7 @@
 // SQL schema. Amounts are stored as TEXT holding integer base units
 // (never REAL/float). Dates are ISO-8601 TEXT in UTC.
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -77,4 +77,36 @@ CREATE TRIGGER IF NOT EXISTS audit_log_no_update
 CREATE TRIGGER IF NOT EXISTS audit_log_no_delete
   BEFORE DELETE ON audit_log
   BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+
+-- v2: transactional outbox. The processor writes an event in the SAME
+-- transaction as the status change, so no notification is lost if the
+-- process crashes or the free host goes to sleep right after a payment.
+CREATE TABLE IF NOT EXISTS events (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  type        TEXT NOT NULL,
+  payload     TEXT NOT NULL,
+  created_at  TEXT NOT NULL
+);
+
+-- One row per Telegram message / webhook call. dedupe_key makes fan-out idempotent.
+CREATE TABLE IF NOT EXISTS deliveries (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id         INTEGER NOT NULL REFERENCES events(id),
+  channel          TEXT NOT NULL,
+  target           TEXT NOT NULL,
+  dedupe_key       TEXT NOT NULL UNIQUE,
+  body             TEXT NOT NULL,
+  status           TEXT NOT NULL,
+  attempts         INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at  TEXT NOT NULL,
+  last_error       TEXT,
+  sent_at          TEXT,
+  created_at       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_deliveries_due ON deliveries (status, next_attempt_at);
+
+CREATE TABLE IF NOT EXISTS kv (
+  key    TEXT PRIMARY KEY,
+  value  TEXT NOT NULL
+);
 `;

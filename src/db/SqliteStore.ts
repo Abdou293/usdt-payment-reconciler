@@ -8,7 +8,18 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { unitsFromDb } from '../core/money.js';
 import type { Network, Order, OrderStatus, Payment, PaymentStatus, Token } from '../core/types.js';
 import { SCHEMA_SQL, SCHEMA_VERSION } from './schema.js';
-import type { AuditEntry, ChainState, NewPayment, Store } from './Store.js';
+import type {
+  AuditEntry,
+  ChainState,
+  Delivery,
+  DeliveryChannel,
+  DeliveryStatus,
+  DomainEvent,
+  EventType,
+  NewDelivery,
+  NewPayment,
+  Store,
+} from './Store.js';
 
 type Row = Record<string, SQLInputValue>;
 
@@ -23,7 +34,7 @@ export class SqliteStore implements Store {
     this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
     this.db.exec(SCHEMA_SQL);
     this.db
-      .prepare('INSERT OR IGNORE INTO schema_meta (key, value) VALUES (?, ?)')
+      .prepare('INSERT OR REPLACE INTO schema_meta (key, value) VALUES (?, ?)')
       .run('schema_version', String(SCHEMA_VERSION));
   }
 
@@ -227,6 +238,92 @@ export class SqliteStore implements Store {
       );
   }
 
+  async setPayerChatId(orderId: string, chatId: string): Promise<boolean> {
+    const result = this.db
+      .prepare('UPDATE orders SET payer_telegram_chat_id = ? WHERE id = ? AND payer_telegram_chat_id IS NULL')
+      .run(chatId, orderId);
+    return Number(result.changes) === 1;
+  }
+
+  async listRecentOrders(limit: number): Promise<Order[]> {
+    const rows = this.db.prepare('SELECT * FROM orders ORDER BY created_at DESC LIMIT ?').all(limit) as Row[];
+    return rows.map(toOrder);
+  }
+
+  // ---------- Outbox ----------
+
+  async addEvent(type: EventType, payload: Record<string, unknown>, createdAt: Date): Promise<number> {
+    const result = this.db
+      .prepare('INSERT INTO events (type, payload, created_at) VALUES (?, ?, ?)')
+      .run(type, JSON.stringify(payload), createdAt.toISOString());
+    return Number(result.lastInsertRowid);
+  }
+
+  async listEventsAfter(afterId: number, limit: number): Promise<DomainEvent[]> {
+    const rows = this.db.prepare('SELECT * FROM events WHERE id > ? ORDER BY id LIMIT ?').all(afterId, limit) as Row[];
+    return rows.map((r) => ({
+      id: Number(r.id),
+      type: String(r.type) as EventType,
+      payload: JSON.parse(String(r.payload)) as Record<string, unknown>,
+      createdAt: new Date(String(r.created_at)),
+    }));
+  }
+
+  async getKv(key: string): Promise<string | null> {
+    const row = this.db.prepare('SELECT value FROM kv WHERE key = ?').get(key) as Row | undefined;
+    return row ? String(row.value) : null;
+  }
+
+  async setKv(key: string, value: string): Promise<void> {
+    this.db
+      .prepare('INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+      .run(key, value);
+  }
+
+  async insertDeliveryIfNew(d: NewDelivery): Promise<boolean> {
+    const result = this.db
+      .prepare(
+        `INSERT OR IGNORE INTO deliveries (event_id, channel, target, dedupe_key, body, status, attempts, next_attempt_at, created_at)
+         VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?)`,
+      )
+      .run(d.eventId, d.channel, d.target, d.dedupeKey, d.body, d.nextAttemptAt.toISOString(), d.createdAt.toISOString());
+    return Number(result.changes) === 1;
+  }
+
+  async listDueDeliveries(now: Date, limit: number): Promise<Delivery[]> {
+    const rows = this.db
+      .prepare(`SELECT * FROM deliveries WHERE status = 'pending' AND next_attempt_at <= ? ORDER BY id LIMIT ?`)
+      .all(now.toISOString(), limit) as Row[];
+    return rows.map(toDelivery);
+  }
+
+  async markDeliverySent(id: number, attempts: number, at: Date): Promise<void> {
+    this.db
+      .prepare(`UPDATE deliveries SET status = 'sent', attempts = ?, sent_at = ?, last_error = NULL WHERE id = ?`)
+      .run(attempts, at.toISOString(), id);
+  }
+
+  async markDeliveryRetry(id: number, attempts: number, nextAttemptAt: Date, error: string): Promise<void> {
+    this.db
+      .prepare(`UPDATE deliveries SET attempts = ?, next_attempt_at = ?, last_error = ? WHERE id = ?`)
+      .run(attempts, nextAttemptAt.toISOString(), error.slice(0, 500), id);
+  }
+
+  async markDeliveryFailed(id: number, attempts: number, error: string): Promise<void> {
+    this.db
+      .prepare(`UPDATE deliveries SET status = 'failed', attempts = ?, last_error = ? WHERE id = ?`)
+      .run(attempts, error.slice(0, 500), id);
+  }
+
+  async listDeliveries(statuses: readonly DeliveryStatus[], limit: number): Promise<Delivery[]> {
+    if (statuses.length === 0) return [];
+    const placeholders = statuses.map(() => '?').join(', ');
+    const rows = this.db
+      .prepare(`SELECT * FROM deliveries WHERE status IN (${placeholders}) ORDER BY id DESC LIMIT ?`)
+      .all(...statuses, limit) as Row[];
+    return rows.map(toDelivery);
+  }
+
   // ---------- Audit ----------
 
   async addAudit(e: Omit<AuditEntry, 'id'>): Promise<void> {
@@ -286,6 +383,23 @@ function toOrder(r: Row): Order {
     expiresAt: new Date(String(r.expires_at)),
     payerTelegramChatId: r.payer_telegram_chat_id === null ? null : String(r.payer_telegram_chat_id),
     manuallyResolved: Number(r.manually_resolved) === 1,
+  };
+}
+
+function toDelivery(r: Row): Delivery {
+  return {
+    id: Number(r.id),
+    eventId: Number(r.event_id),
+    channel: String(r.channel) as DeliveryChannel,
+    target: String(r.target),
+    dedupeKey: String(r.dedupe_key),
+    body: String(r.body),
+    status: String(r.status) as DeliveryStatus,
+    attempts: Number(r.attempts),
+    nextAttemptAt: new Date(String(r.next_attempt_at)),
+    lastError: r.last_error === null ? null : String(r.last_error),
+    sentAt: optDate(r.sent_at),
+    createdAt: new Date(String(r.created_at)),
   };
 }
 

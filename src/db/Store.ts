@@ -29,6 +29,35 @@ export interface AuditEntry {
   createdAt: Date;
 }
 
+export type EventType = 'order_status_changed' | 'review_alert';
+
+export interface DomainEvent {
+  id: number;
+  type: EventType;
+  payload: Record<string, unknown>;
+  createdAt: Date;
+}
+
+export type DeliveryChannel = 'telegram' | 'webhook';
+export type DeliveryStatus = 'pending' | 'sent' | 'failed';
+
+export interface Delivery {
+  id: number;
+  eventId: number;
+  channel: DeliveryChannel;
+  target: string; //      Telegram chat id, or "merchant" for the webhook
+  dedupeKey: string;
+  body: string; //        message text, or the exact JSON webhook body
+  status: DeliveryStatus;
+  attempts: number;
+  nextAttemptAt: Date;
+  lastError: string | null;
+  sentAt: Date | null;
+  createdAt: Date;
+}
+
+export type NewDelivery = Pick<Delivery, 'eventId' | 'channel' | 'target' | 'dedupeKey' | 'body' | 'nextAttemptAt' | 'createdAt'>;
+
 export interface Store {
   /** Run `fn` atomically: all writes succeed together or none do. */
   transaction<T>(fn: () => Promise<T>): Promise<T>;
@@ -58,6 +87,23 @@ export interface Store {
   // Chain watcher state
   getChainState(network: Network): Promise<ChainState>;
   saveChainState(state: ChainState): Promise<void>;
+
+  /** Link a payer's Telegram chat to an order. Only succeeds if no chat is linked yet. */
+  setPayerChatId(orderId: string, chatId: string): Promise<boolean>;
+  listRecentOrders(limit: number): Promise<Order[]>;
+
+  // Outbox: events and deliveries (notifications, webhooks)
+  addEvent(type: EventType, payload: Record<string, unknown>, createdAt: Date): Promise<number>;
+  listEventsAfter(afterId: number, limit: number): Promise<DomainEvent[]>;
+  getKv(key: string): Promise<string | null>;
+  setKv(key: string, value: string): Promise<void>;
+  /** Returns false if a delivery with the same dedupe key already exists. */
+  insertDeliveryIfNew(delivery: NewDelivery): Promise<boolean>;
+  listDueDeliveries(now: Date, limit: number): Promise<Delivery[]>;
+  markDeliverySent(id: number, attempts: number, at: Date): Promise<void>;
+  markDeliveryRetry(id: number, attempts: number, nextAttemptAt: Date, error: string): Promise<void>;
+  markDeliveryFailed(id: number, attempts: number, error: string): Promise<void>;
+  listDeliveries(statuses: readonly DeliveryStatus[], limit: number): Promise<Delivery[]>;
 
   // Audit
   addAudit(entry: Omit<AuditEntry, 'id'>): Promise<void>;

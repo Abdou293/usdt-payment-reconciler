@@ -10,6 +10,11 @@ import { SqliteStore } from '../db/SqliteStore.js';
 import type { ServiceConfig, WatchedNetwork } from '../services/config.js';
 import { OrderService } from '../services/OrderService.js';
 import { PaymentProcessor } from '../services/PaymentProcessor.js';
+import { Api } from 'grammy';
+import { BotHandlers } from '../bot/BotHandlers.js';
+import { GrammyTelegramSender } from '../notifications/GrammyTelegramSender.js';
+import type { ExplorerLink } from '../notifications/messages.js';
+import { NotificationDispatcher } from '../notifications/NotificationDispatcher.js';
 import { ChainWatcher } from '../workers/ChainWatcher.js';
 import type { Env } from './env.js';
 
@@ -27,6 +32,9 @@ export interface Runtime {
   orders: OrderService;
   processor: PaymentProcessor;
   networks: NetworkRuntime[];
+  dispatcher: NotificationDispatcher;
+  botHandlers: BotHandlers;
+  explorerLink: ExplorerLink;
   warnings: string[];
 }
 
@@ -123,5 +131,27 @@ export function buildRuntime(env: Env): Runtime {
     }),
   }));
 
-  return { env, store, config, orders, processor, networks, warnings };
+  const adapters = new Map(networks.map((n) => [n.settings.network, n.adapter]));
+  const explorerLink: ExplorerLink = (network, txHash) => adapters.get(network)?.explorerTxUrl(txHash) ?? null;
+
+  const telegramEnabled = env.TELEGRAM_BOT_TOKEN !== undefined;
+  if (telegramEnabled && !env.TELEGRAM_ADMIN_CHAT_ID) {
+    warnings.push('TELEGRAM_ADMIN_CHAT_ID not set: admin alerts (problem payments) will not be sent.');
+  }
+  const dispatcher = new NotificationDispatcher(store, {
+    context: {
+      telegramEnabled,
+      adminChatId: env.TELEGRAM_ADMIN_CHAT_ID ?? null,
+      webhookEnabled: env.WEBHOOK_URL !== undefined,
+      explorer: explorerLink,
+    },
+    telegram: telegramEnabled ? new GrammyTelegramSender(new Api(env.TELEGRAM_BOT_TOKEN!)) : undefined,
+    webhook: env.WEBHOOK_URL ? { url: env.WEBHOOK_URL, secret: env.WEBHOOK_SECRET! } : undefined,
+  });
+  const botHandlers = new BotHandlers(store, orders, {
+    adminChatId: env.TELEGRAM_ADMIN_CHAT_ID ?? null,
+    botUsername: env.TELEGRAM_BOT_USERNAME ?? null,
+  });
+
+  return { env, store, config, orders, processor, networks, dispatcher, botHandlers, explorerLink, warnings };
 }

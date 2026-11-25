@@ -32,6 +32,23 @@ const optionalString = z
   .optional()
   .transform((s) => (s && s.trim() !== '' ? s.trim() : undefined));
 
+/** A secret value: optional, but placeholders copied from .env.example are refused. */
+const secretString = optionalString.refine(
+  (s) => s === undefined || !s.startsWith('replace_with'),
+  'still contains the placeholder from .env.example',
+);
+
+function isAllowedWebhookUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (url.username || url.password) return false;
+    if (url.protocol === 'https:') return true;
+    return url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 const amountUnits = z
   .string()
   .default('0')
@@ -70,6 +87,22 @@ export const envSchema = z.object({
   UNDERPAY_TOLERANCE_UNITS: amountUnits,
   OVERPAY_TOLERANCE_UNITS: amountUnits,
   LATE_RESERVATION_MINUTES: z.coerce.number().int().min(0).max(10_080).default(1440),
+
+  // ---- Telegram (optional) ----
+  TELEGRAM_BOT_TOKEN: secretString.refine(
+    (s) => s === undefined || /^\d{6,12}:[A-Za-z0-9_-]{30,50}$/.test(s),
+    'does not look like a Telegram bot token from @BotFather',
+  ),
+  TELEGRAM_BOT_USERNAME: optionalString.refine((s) => s === undefined || /^[A-Za-z0-9_]{5,32}$/.test(s), 'invalid bot username (without @)'),
+  TELEGRAM_ADMIN_CHAT_ID: optionalString.refine((s) => s === undefined || /^-?\d{1,20}$/.test(s), 'must be a numeric chat id'),
+
+  // ---- Merchant webhook (optional) ----
+  WEBHOOK_URL: optionalString.refine((s) => s === undefined || isAllowedWebhookUrl(s), 'must be https:// (http:// only for localhost)'),
+  WEBHOOK_SECRET: secretString.refine((s) => s === undefined || s.length >= 32, 'must be at least 32 characters'),
+}).superRefine((env, ctx) => {
+  if (env.WEBHOOK_URL && !env.WEBHOOK_SECRET) {
+    ctx.addIssue({ code: 'custom', path: ['WEBHOOK_SECRET'], message: 'required when WEBHOOK_URL is set' });
+  }
 });
 
 export type Env = z.infer<typeof envSchema>;

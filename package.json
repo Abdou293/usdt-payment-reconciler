@@ -10,8 +10,8 @@
   },
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
-    "dev": "tsx watch src/index.ts",
-    "start": "node dist/index.js",
+    "dev": "tsx --env-file-if-exists=.env src/main.ts",
+    "start": "node --env-file-if-exists=.env dist/main.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run",
@@ -19,7 +19,7 @@
     "scan:secrets": "gitleaks dir . --config .gitleaks.toml --redact --no-banner",
     "scan:history": "gitleaks git . --config .gitleaks.toml --redact --no-banner",
     "scan:all": "npm run scan:secrets && npm run scan:history",
-    "watch": "tsx --env-file-if-exists=.env src/watch.ts",
+    "watch": "npm run dev",
     "verify:contracts": "tsx scripts/verify-token-contracts.ts",
     "record:fixtures": "tsx scripts/record-fixtures.ts",
     "e2e:readonly": "tsx scripts/e2e-readonly.ts"
@@ -34,6 +34,7 @@
     "esbuild@0.28.2": true
   },
   "dependencies": {
+    "grammy": "^1.48.0",
     "zod": "^4.6.7"
   }
 }
