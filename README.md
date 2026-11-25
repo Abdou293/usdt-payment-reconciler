@@ -14,6 +14,9 @@ Automatically detects incoming USDT deposits (TRON TRC20 and an EVM network), ma
 
 This is a portfolio project. It is **not audited** and **not production-hardened**. Nothing here is financial or legal advice. Do not use it with real funds without your own independent review.
 
+**Live demo (simulated chain, no real funds):** https://usdt-payment-reconciler-demo.onrender.com
+(free host: the first visit after a quiet period can take up to a minute to wake up)
+
 ## Run the demo locally (no wallet, no API keys)
 
 ```bash
@@ -26,6 +29,8 @@ npm run dev                # APP_MODE=demo by default -> http://localhost:3000
 Log in with the demo account shown on the login page. Demo mode seeds one week of
 simulated orders and payments and adds simulator buttons (pay, underpay, overpay,
 wrong token, mine blocks, reorg). Nothing touches a real blockchain.
+
+Deploying (free demo on Render, or a real merchant install): see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## HTTP API (summary)
 
