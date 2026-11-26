@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type PaymentDto, type SessionInfo } from '../api';
-import { Card, Empty, ErrorNote, fmtAmount, fmtTime, ReasonAction, shortHash, STATUS_LABELS, StatusBadge, useAsync } from '../ui';
+import { Card, Empty, ErrorNote, fmtAmount, fmtTime, networkLabel, ReasonAction, shortHash, STATUS_LABELS, StatusBadge, useAsync } from '../ui';
 
 const REVIEW = ['underpaid', 'overpaid', 'late_payment'];
 const CANCELLABLE = ['pending', 'underpaid', 'overpaid', 'late_payment'];
@@ -41,7 +41,7 @@ export function OrderDetailPage({ id, session }: { id: string; session: SessionI
             <dt>Received</dt>
             <dd className="mono">{fmtAmount(order.paid_total)} {order.token}</dd>
             <dt>Network</dt>
-            <dd>{order.network}</dd>
+            <dd>{networkLabel(session.networks, order.network)}</dd>
             <dt>Pay to (watch-only)</dt>
             <dd className="mono break">{order.receiving_address}</dd>
             <dt>Reference</dt>

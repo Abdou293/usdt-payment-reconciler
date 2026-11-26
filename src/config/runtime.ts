@@ -37,8 +37,8 @@ export interface Runtime {
   botHandlers: BotHandlers;
   explorerLink: ExplorerLink;
   auth: AuthService;
-  /** Only in demo mode: the in-memory simulated chain. */
-  simulatedChain: SimulatedChainAdapter | null;
+  /** Only in demo mode: one in-memory simulated chain per demo network (empty otherwise). */
+  simulatedChains: Map<Network, SimulatedChainAdapter>;
   warnings: string[];
 }
 
@@ -57,22 +57,34 @@ interface EvmNetworkSpec {
   testnet: { name: string; chainId: number; explorer: string; token: string | undefined; decimals: number };
 }
 
-export const DEMO_ADDRESSES = ['SIM-DEMO-ADDRESS-1', 'SIM-DEMO-ADDRESS-2'];
+/**
+ * The public demo shows every supported network, each on its OWN SIMULATED chain:
+ * fake blocks, fake addresses, no real wallet, chain or money. The labels say so.
+ */
+export const DEMO_NETWORKS: ReadonlyArray<{ network: Network; label: string; addresses: string[] }> = [
+  { network: 'tron', label: 'TRON · TRC20 (simulated)', addresses: ['SIM-TRON-ADDRESS-1', 'SIM-TRON-ADDRESS-2'] },
+  { network: 'bsc', label: 'BNB Smart Chain · BEP20 (simulated)', addresses: ['SIM-BSC-ADDRESS-1'] },
+  { network: 'ethereum', label: 'Ethereum · ERC20 (simulated)', addresses: ['SIM-ETH-ADDRESS-1'] },
+  { network: 'arbitrum', label: 'Arbitrum (simulated)', addresses: ['SIM-ARB-ADDRESS-1'] },
+];
 
 export function buildRuntime(env: Env): Runtime {
   const store = new SqliteStore(env.DATABASE_URL);
   const warnings: string[] = [];
-  let simulatedChain: SimulatedChainAdapter | null = null;
+  const simulatedChains = new Map<Network, SimulatedChainAdapter>();
   const pending: Array<{ settings: WatchedNetwork; adapter: ChainAdapter; label: string; startBlock?: number | undefined; maxBlocks: number }> = [];
 
   if (env.APP_MODE === 'demo') {
-    simulatedChain = new SimulatedChainAdapter();
-    pending.push({
-      settings: { network: 'simulated', usdtContract: SIMULATED_USDT_CONTRACT, requiredConfirmations: 3, watchAddresses: DEMO_ADDRESSES },
-      adapter: simulatedChain,
-      label: 'Simulated chain (demo mode, no real funds)',
-      maxBlocks: 1000,
-    });
+    for (const d of DEMO_NETWORKS) {
+      const chain = new SimulatedChainAdapter({ network: d.network });
+      simulatedChains.set(d.network, chain);
+      pending.push({
+        settings: { network: d.network, usdtContract: SIMULATED_USDT_CONTRACT, requiredConfirmations: 3, watchAddresses: d.addresses },
+        adapter: chain,
+        label: d.label,
+        maxBlocks: 1000,
+      });
+    }
   } else {
     const isMainnet = env.APP_MODE === 'mainnet';
 
@@ -215,5 +227,5 @@ export function buildRuntime(env: Env): Runtime {
   const auth = new AuthService(store, () => new Date(), env.SESSION_TTL_HOURS * 60 * 60_000, resetChannel);
   if (env.APP_MODE !== 'demo' && !env.MERCHANT_API_KEY) warnings.push('MERCHANT_API_KEY not set: the merchant REST API is disabled.');
 
-  return { env, store, config, orders, processor, networks, dispatcher, botHandlers, explorerLink, auth, simulatedChain, warnings };
+  return { env, store, config, orders, processor, networks, dispatcher, botHandlers, explorerLink, auth, simulatedChains, warnings };
 }

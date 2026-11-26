@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api, ORDER_STATUSES, type SessionInfo } from '../api';
-import { Card, Empty, ErrorNote, fmtAmount, fmtTime, STATUS_LABELS, StatusBadge, useAsync } from '../ui';
+import { Card, Empty, ErrorNote, fmtAmount, fmtTime, networkLabel, STATUS_LABELS, StatusBadge, useAsync } from '../ui';
 
 const PAGE_SIZE = 25;
 
@@ -67,7 +67,7 @@ export function OrdersPage({ session }: { session: SessionInfo }) {
                     <td>{fmtTime(o.created_at)}</td>
                     <td><a href={`#/orders/${o.id}`} className="mono">{o.id}</a></td>
                     <td>{o.external_ref ?? <span className="muted">—</span>}</td>
-                    <td>{o.network}</td>
+                    <td>{networkLabel(session.networks, o.network)}</td>
                     <td className="num mono">{o.amount}</td>
                     <td className="num mono">{fmtAmount(o.paid_total)}</td>
                     <td><StatusBadge status={o.status} />{o.manually_resolved && <span className="tag">manual</span>}</td>

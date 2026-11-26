@@ -1,7 +1,9 @@
 // Demo seed, CSV safety, reconciliation report and simulated-chain restart behaviour.
 
 import { describe, expect, it } from 'vitest';
-import { SimulatedChainAdapter } from '../../src/chains/simulated/SimulatedChainAdapter.js';
+import { SimulatedChainAdapter, SIMULATED_USDT_CONTRACT } from '../../src/chains/simulated/SimulatedChainAdapter.js';
+import { loadEnv } from '../../src/config/env.js';
+import { buildRuntime } from '../../src/config/runtime.js';
 import { parseAmount } from '../../src/core/money.js';
 import type { Order, Payment } from '../../src/core/types.js';
 import { seedDemo } from '../../src/demo/seedDemo.js';
@@ -94,9 +96,11 @@ describe('demo seed', () => {
   it('creates a week of varied history once, never in the future', async () => {
     const h = createHarness({ addresses: ['SIM-DEMO-ADDRESS-1', 'SIM-DEMO-ADDRESS-2'] });
     const now = new Date('2026-06-15T12:00:00Z');
-    const result = await seedDemo(h.store, h.config, now);
+    // One simulated network only (the harness also has a TRON entry).
+    const config = { ...h.config, networks: new Map([['simulated' as const, h.config.networks.get('simulated')!]]) };
+    const result = await seedDemo(h.store, config, now);
     expect(result.seeded).toBe(true);
-    expect(result.latestBlock).toBeGreaterThan(1000);
+    expect(result.latestBlocks.get('simulated')).toBeGreaterThan(1000);
 
     const { items, total } = await h.store.listOrders({ limit: 500, offset: 0 });
     expect(total).toBe(result.orders);
@@ -110,8 +114,32 @@ describe('demo seed', () => {
     const odd = await h.store.listPaymentsByStatus(['unmatched', 'wrong_token', 'dismissed']);
     expect(new Set(odd.map((p) => p.status))).toEqual(new Set(['unmatched', 'wrong_token', 'dismissed']));
 
-    const again = await seedDemo(h.store, h.config, now);
+    const again = await seedDemo(h.store, config, now);
     expect(again.seeded).toBe(false);
     expect((await h.store.listOrders({ limit: 1, offset: 0 })).total).toBe(total);
+  });
+
+  it('spreads the demo over TRON, BSC, Ethereum and Arbitrum, each on its own simulated chain', async () => {
+    const runtime = buildRuntime(loadEnv({ APP_MODE: 'demo', DATABASE_URL: 'file::memory:' } as NodeJS.ProcessEnv));
+    try {
+      expect(runtime.networks.map((n) => n.settings.network)).toEqual(['tron', 'bsc', 'ethereum', 'arbitrum']);
+      // Every demo network is fake and says so: simulated adapter, simulated contract, "(simulated)" label.
+      for (const n of runtime.networks) {
+        expect(runtime.simulatedChains.get(n.settings.network)).toBe(n.adapter);
+        expect(n.settings.usdtContract).toBe(SIMULATED_USDT_CONTRACT);
+        expect(n.label).toMatch(/\(simulated\)$/);
+      }
+      const result = await seedDemo(runtime.store, runtime.config, new Date('2026-06-15T12:00:00Z'));
+      const { items } = await runtime.store.listOrders({ limit: 500, offset: 0 });
+      const perNetwork = new Set(items.map((o) => o.network));
+      expect(perNetwork).toEqual(new Set(['tron', 'bsc', 'ethereum', 'arbitrum']));
+      expect(items.filter((o) => o.status === 'confirmed').map((o) => o.network)).toEqual(expect.arrayContaining(['tron', 'bsc', 'ethereum', 'arbitrum']));
+      expect(items.filter((o) => o.status === 'pending').length).toBe(4); // one open order per network for the "pay" buttons
+      for (const net of ['tron', 'bsc', 'ethereum', 'arbitrum'] as const) {
+        expect(result.latestBlocks.get(net)).toBeGreaterThan(1000);
+      }
+    } finally {
+      runtime.store.close();
+    }
   });
 });

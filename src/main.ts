@@ -54,13 +54,19 @@ if (!isDemo) {
 }
 
 // ---- Demo data ----
-const demoChain = runtime.simulatedChain;
-const demoNetwork = runtime.networks.find((n) => n.settings.network === 'simulated');
-if (isDemo && demoChain && demoNetwork) {
+// One simulated chain per demo network (TRON, BSC, Ethereum, Arbitrum): all fake.
+const demoChains = runtime.networks.flatMap((n) => {
+  const chain = runtime.simulatedChains.get(n.settings.network);
+  return chain ? [{ network: n.settings.network, chain, watcher: n.watcher, watchAddresses: n.settings.watchAddresses }] : [];
+});
+if (isDemo && demoChains.length > 0) {
   const seed = await seedDemo(runtime.store, runtime.config);
-  if (seed.seeded) console.log(`Demo data seeded: ${seed.orders} orders.`);
-  // Continue the in-memory chain from where the saved cursor stopped.
-  if (seed.latestBlock !== null) demoChain.fastForwardTo(seed.latestBlock);
+  if (seed.seeded) console.log(`Demo data seeded: ${seed.orders} orders on ${demoChains.length} simulated networks.`);
+  // Continue each in-memory chain from where its saved cursor stopped.
+  for (const c of demoChains) {
+    const latest = seed.latestBlocks.get(c.network);
+    if (latest !== null && latest !== undefined) c.chain.fastForwardTo(latest);
+  }
   // Seeded history should not trigger notifications.
   if (seed.seeded) await runtime.dispatcher.skipExistingEvents();
 }
@@ -81,15 +87,8 @@ const server = await buildServer({
   pollIntervalSeconds: env.POLL_INTERVAL_SECONDS,
   dashboardDir: 'dashboard/dist',
   demo:
-    isDemo && demoChain && demoNetwork
-      ? createSimulatorControls({
-          chain: demoChain,
-          watcher: demoNetwork.watcher,
-          dispatcher: runtime.dispatcher,
-          store: runtime.store,
-          lock,
-          watchAddresses: demoNetwork.settings.watchAddresses,
-        })
+    isDemo && demoChains.length > 0
+      ? createSimulatorControls({ chains: demoChains, dispatcher: runtime.dispatcher, store: runtime.store, lock })
       : undefined,
   demoCredentials: isDemo ? { username: DEMO_USERNAME, password: env.DEMO_ADMIN_PASSWORD } : undefined,
   demoOrderLimit: DEMO_ORDER_LIMIT,
@@ -103,8 +102,8 @@ let stopping = false;
 
 async function tick(): Promise<void> {
   await lock.run(async () => {
-    // Demo: the simulated chain produces one block per tick, like a real chain.
-    if (isDemo && demoChain) demoChain.mine(1);
+    // Demo: each simulated chain produces one block per tick, like a real chain.
+    if (isDemo) for (const c of demoChains) c.chain.mine(1);
     for (const n of runtime.networks) {
       const results = await n.watcher.catchUp(20);
       const last = results.at(-1);

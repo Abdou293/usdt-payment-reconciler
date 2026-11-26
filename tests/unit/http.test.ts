@@ -42,7 +42,7 @@ async function setup(overrides: Omit<Partial<ServerDeps>, "demo"> & { demoMode?:
     pollIntervalSeconds: 30,
     now: h.clock.now,
     demo: demo
-      ? createSimulatorControls({ chain: h.chain, watcher: h.watcher, dispatcher, store: h.store, lock: new Mutex(), watchAddresses: [SIM_ADDRESS] })
+      ? createSimulatorControls({ chains: [{ network: 'simulated', chain: h.chain, watcher: h.watcher, watchAddresses: [SIM_ADDRESS] }], dispatcher, store: h.store, lock: new Mutex() })
       : undefined,
     ...rest,
   });

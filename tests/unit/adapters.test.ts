@@ -205,7 +205,9 @@ describe('configuration safety', () => {
     const runtime = buildRuntime(loadEnv({ DATABASE_URL: 'file::memory:' } as NodeJS.ProcessEnv));
     try {
       expect(runtime.env.APP_MODE).toBe('demo');
-      expect(runtime.networks.map((n) => n.settings.network)).toEqual(['simulated']);
+      // The demo runs every network on its own SIMULATED chain (no real data or funds).
+      expect(runtime.networks.map((n) => n.settings.network)).toEqual(['tron', 'bsc', 'ethereum', 'arbitrum']);
+      expect(runtime.networks.every((n) => n.label.endsWith('(simulated)'))).toBe(true);
     } finally {
       runtime.store.close();
     }

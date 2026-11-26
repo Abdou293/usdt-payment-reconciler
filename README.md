@@ -9,7 +9,7 @@ produces daily and weekly **reconciliation reports** with a review queue for eve
 stores a private key or seed phrase, and contains no signing code.
 
 **▶ Live demo:** https://usdt-payment-reconciler-demo.onrender.com
-(simulated chain, no real funds; the login is shown on the page. Free hosting: the first visit after a
+(TRON, BSC, Ethereum and Arbitrum, each on its own simulated chain, no real funds; the login is shown on the page. Free hosting: the first visit after a
 quiet period can take up to a minute to wake up.)
 
 ![Order detail with simulator, payments and audit trail](docs/screenshots/order-detail.jpg)
@@ -148,7 +148,7 @@ entries passed (last run 2026-11-26).
 
 ## Testing: what was actually run
 
-- **141 automated tests** (Vitest) covering money arithmetic, matching, the state machine, the full
+- **142 automated tests** (Vitest) covering money arithmetic, matching, the state machine, the full
   payment flow on the simulated chain (underpay, overpay, late, expiry, duplicates, reorgs, restart
   catch-up), notifications and webhook signatures, the HTTP API (auth, CSRF, rate limits, idempotency,
   validation, password change and reset), reports and CSV export, and the 18-decimal conversion.

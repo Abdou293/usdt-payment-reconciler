@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { api, exportUrl, type OrderStatus } from '../api';
-import { Card, daysAgoUtc, Empty, ErrorNote, fmtAmount, STATUS_LABELS, todayUtc, useAsync } from '../ui';
+import { api, exportUrl, type OrderStatus, type SessionInfo } from '../api';
+import { Card, daysAgoUtc, Empty, ErrorNote, fmtAmount, networkLabel, STATUS_LABELS, todayUtc, useAsync } from '../ui';
 
-export function ReportsPage() {
+export function ReportsPage({ session }: { session: SessionInfo }) {
   const [period, setPeriod] = useState<'day' | 'week'>('week');
   const [date, setDate] = useState(todayUtc());
   const { data, error, loading } = useAsync(() => api.report(period, date), [period, date]);
@@ -36,7 +36,7 @@ export function ReportsPage() {
             {data.networks.length === 0 && <Empty>No activity in this period.</Empty>}
             {data.networks.map((n) => (
               <div key={n.network} className="report-network">
-                <h3>{n.network}</h3>
+                <h3>{networkLabel(session.networks, n.network)}</h3>
                 <div className="stats">
                   <Stat label="Requested" value={fmtAmount(n.requestedTotal)} hint={`${plural(n.ordersCreated, 'order')} created`} />
                   <Stat label="Received for confirmed orders" value={fmtAmount(n.confirmedReceivedTotal)} hint={`${n.ordersByStatus.confirmed ?? 0} confirmed`} />
@@ -66,7 +66,7 @@ export function ReportsPage() {
                     {data.exceptions.map((e, i) => (
                       <tr key={i}>
                         <td>{e.kind.replaceAll('_', ' ')}</td>
-                        <td>{e.network}</td>
+                        <td>{networkLabel(session.networks, e.network)}</td>
                         <td>{e.orderId ? <a href={`#/orders/${e.orderId}`} className="mono">{e.orderId}</a> : <span className="mono">payment #{e.paymentId}</span>}</td>
                         <td className="mono small">{e.detail}</td>
                       </tr>

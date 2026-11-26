@@ -52,6 +52,10 @@ export const fmtAmount = (value: string | undefined) => {
   return `${i}.${frac}`;
 };
 
+/** Human name of a network ("bsc" -> "BNB Smart Chain · BEP20 ..."), from the server's session info. */
+export const networkLabel = (networks: ReadonlyArray<{ network: string; label: string }>, id: string) =>
+  networks.find((n) => n.network === id)?.label ?? id;
+
 export const shortHash = (h: string) => (h.length > 18 ? `${h.slice(0, 10)}…${h.slice(-6)}` : h);
 
 export const todayUtc = () => new Date().toISOString().slice(0, 10);

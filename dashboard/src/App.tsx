@@ -57,7 +57,7 @@ export function App() {
   let page;
   if (section === 'orders' && route[1]) page = <OrderDetailPage id={route[1]} session={session} />;
   else if (section === 'review') page = <ReviewPage />;
-  else if (section === 'reports') page = <ReportsPage />;
+  else if (section === 'reports') page = <ReportsPage session={session} />;
   else if (section === 'health') page = <HealthPage session={session} />;
   else if (section === 'account') page = <AccountPage session={session} />;
   else page = <OrdersPage session={session} />;
@@ -78,7 +78,7 @@ export function App() {
           ))}
         </nav>
         <div className="sidebar-foot">
-          <span className={`mode mode-${session.mode}`}>{session.mode === 'demo' ? 'DEMO · simulated chain' : session.mode === 'mainnet' ? 'MAINNET · read-only' : 'TESTNET'}</span>
+          <span className={`mode mode-${session.mode}`}>{session.mode === 'demo' ? 'DEMO · simulated chains' : session.mode === 'mainnet' ? 'MAINNET · read-only' : 'TESTNET'}</span>
           <span className="muted">Signed in as {session.username}</span>
           <button
             className="btn btn-ghost"

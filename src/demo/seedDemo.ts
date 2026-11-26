@@ -1,4 +1,5 @@
-// Demo data: one week of realistic history on the SIMULATED chain.
+// Demo data: one week of realistic history on SIMULATED chains (one fake chain
+// per network in the demo: TRON, BSC, Ethereum, Arbitrum).
 // No real wallet, chain or money is involved.
 //
 // The seed runs the REAL services (OrderService, PaymentProcessor, ChainWatcher)
@@ -7,7 +8,7 @@
 
 import { SimulatedChainAdapter, SIMULATED_USDT_CONTRACT } from '../chains/simulated/SimulatedChainAdapter.js';
 import { parseAmount } from '../core/money.js';
-import type { Order } from '../core/types.js';
+import type { Network, Order } from '../core/types.js';
 import type { Store } from '../db/Store.js';
 import type { ServiceConfig } from '../services/config.js';
 import { OrderService } from '../services/OrderService.js';
@@ -32,46 +33,59 @@ class SeedClock {
 export interface SeedResult {
   seeded: boolean;
   orders: number;
-  latestBlock: number | null;
+  /** Last scanned block per simulated network, so the live chains continue from there. */
+  latestBlocks: Map<Network, number | null>;
 }
 
 /** Seed the database once (only when it has no orders yet). */
 export async function seedDemo(store: Store, config: ServiceConfig, realNow: Date = new Date()): Promise<SeedResult> {
+  const networks = [...config.networks.values()];
+  if (networks.length === 0) throw new Error('Demo seed needs at least one simulated network');
   if ((await store.listOrders({ limit: 1, offset: 0 })).total > 0) {
-    return { seeded: false, orders: 0, latestBlock: (await store.getChainState('simulated')).latestBlock };
+    const latestBlocks = new Map<Network, number | null>();
+    for (const n of networks) latestBlocks.set(n.network, (await store.getChainState(n.network)).latestBlock);
+    return { seeded: false, orders: 0, latestBlocks };
   }
-  const settings = config.networks.get('simulated');
-  if (!settings) throw new Error('Demo seed needs the simulated network');
 
   // Day 0 starts exactly 7 days ago; each day's activity fits well inside 24h,
   // so no seeded timestamp is ever in the future.
   const DAY_MS = 86_400_000;
   const startOfFirstDay = realNow.getTime() - 7 * DAY_MS;
   const clock = new SeedClock(startOfFirstDay);
-  const chain = new SimulatedChainAdapter({ startBlock: DEMO_START_BLOCK, now: clock.now });
   const orders = new OrderService(store, config, clock.now);
   const processor = new PaymentProcessor(store, config, clock.now);
-  const watcher = new ChainWatcher(chain, store, processor, {
-    usdtContract: SIMULATED_USDT_CONTRACT,
-    watchAddresses: settings.watchAddresses,
-    requiredConfirmations: settings.requiredConfirmations,
-    startBlock: DEMO_START_BLOCK,
-    maxBlocksPerPoll: 1000,
-    now: clock.now,
+  const sims = networks.map((settings) => {
+    const chain = new SimulatedChainAdapter({ network: settings.network, startBlock: DEMO_START_BLOCK, now: clock.now });
+    const watcher = new ChainWatcher(chain, store, processor, {
+      usdtContract: SIMULATED_USDT_CONTRACT,
+      watchAddresses: settings.watchAddresses,
+      requiredConfirmations: settings.requiredConfirmations,
+      startBlock: DEMO_START_BLOCK,
+      maxBlocksPerPoll: 1000,
+      now: clock.now,
+    });
+    return { settings, chain, watcher };
   });
+  const simFor = (network: Network) => sims.find((x) => x.settings.network === network)!;
+  /** Spread the orders over the networks (the first one, TRON in the demo, gets the most). */
+  const pick = (n: number) => sims[[0, 1, 0, 2, 3, 0, 1][n % 7]! % sims.length]!;
+  /** Blocks to wait so a payment on this network is confirmed. */
+  const settle = (network: Network) => tick(simFor(network).settings.requiredConfirmations + 1);
 
-  /** Let time pass: mine one block per step and run the watcher. */
+  /** Let time pass: mine one block per step on every chain and run the watchers. */
   const tick = async (steps = 1, minutesPerStep = 1) => {
     for (let i = 0; i < steps; i++) {
       clock.advance(minutesPerStep);
-      chain.mine(1);
-      await watcher.pollOnce();
+      for (const x of sims) {
+        x.chain.mine(1);
+        await x.watcher.pollOnce();
+      }
     }
   };
   const pay = (order: Order, amount: bigint, from: string, tokenContract?: string) =>
-    chain.sendTransfer({ toAddress: order.receivingAddress, amount, fromAddress: from, tokenContract });
+    simFor(order.network).chain.sendTransfer({ toAddress: order.receivingAddress, amount, fromAddress: from, tokenContract });
 
-  await watcher.pollOnce(); // initialise the cursor
+  for (const x of sims) await x.watcher.pollOnce(); // initialise the cursors
   let created = 0;
   const underpaidIds: string[] = [];
   const unmatchedTx: string[] = [];
@@ -87,7 +101,7 @@ export async function seedDemo(store: Store, config: ServiceConfig, realNow: Dat
     for (let i = 0; i < plan.length; i++) {
       const kind = plan[i]!;
       const amount = AMOUNTS[(day * 3 + i) % AMOUNTS.length]!;
-      const order = await orders.createOrder({ amount, network: 'simulated', externalRef: `SHOP-${day + 1}${String(i + 1).padStart(2, '0')}` });
+      const order = await orders.createOrder({ amount, network: pick(day * 3 + i).settings.network, externalRef: `SHOP-${day + 1}${String(i + 1).padStart(2, '0')}` });
       created += 1;
       await tick(1, 3 + ((day + i) % 5)); // the customer takes a few minutes to pay
       const payer = `SIM-CUSTOMER-${(day * 10 + i) % 17}`;
@@ -98,32 +112,34 @@ export async function seedDemo(store: Store, config: ServiceConfig, realNow: Dat
       }
       if (kind === 'over') pay(order, order.payableAmount + parseAmount('5.00'), payer);
       if (kind === 'base') pay(order, order.baseAmount, payer); // payer dropped the unique cents
-      await tick(settings.requiredConfirmations + 1);
+      await settle(order.network);
       clock.advance(25 + ((day * 7 + i * 11) % 60));
     }
 
     // An order nobody pays (expires) and one paid after its deadline (late).
-    const expired = await orders.createOrder({ amount: AMOUNTS[day % AMOUNTS.length]!, network: 'simulated', externalRef: `SHOP-${day + 1}90` });
+    const expired = await orders.createOrder({ amount: AMOUNTS[day % AMOUNTS.length]!, network: pick(day + 1).settings.network, externalRef: `SHOP-${day + 1}90` });
     const late = day % 2 === 0
-      ? await orders.createOrder({ amount: AMOUNTS[(day + 4) % AMOUNTS.length]!, network: 'simulated', externalRef: `SHOP-${day + 1}91`, expiresInMinutes: 20 })
+      ? await orders.createOrder({ amount: AMOUNTS[(day + 4) % AMOUNTS.length]!, externalRef: `SHOP-${day + 1}91`, network: pick(day + 3).settings.network, expiresInMinutes: 20 })
       : null;
     created += late ? 2 : 1;
     void expired;
     await tick(1, 45); // both deadlines pass -> expired
     if (late) {
       pay(late, late.payableAmount, 'SIM-CUSTOMER-LATE');
-      await tick(settings.requiredConfirmations + 1);
+      await settle(late.network);
     }
 
     // A deposit that matches no order, and a token that is not USDT.
     if (day % 3 === 2) {
-      const tx = chain.sendTransfer({ toAddress: settings.watchAddresses[0]!, amount: parseAmount(`${13 + day}.37`), fromAddress: 'SIM-UNKNOWN-SENDER' });
+      const x = pick(day);
+      const tx = x.chain.sendTransfer({ toAddress: x.settings.watchAddresses[0]!, amount: parseAmount(`${13 + day}.37`), fromAddress: 'SIM-UNKNOWN-SENDER' });
       unmatchedTx.push(tx);
-      await tick(settings.requiredConfirmations + 1);
+      await settle(x.settings.network);
     }
     if (day === 3) {
-      chain.sendTransfer({ toAddress: settings.watchAddresses[0]!, amount: parseAmount('50.00'), fromAddress: 'SIM-CONFUSED-PAYER', tokenContract: DEMO_OTHER_TOKEN });
-      await tick(settings.requiredConfirmations + 1);
+      const x = pick(day + 1);
+      x.chain.sendTransfer({ toAddress: x.settings.watchAddresses[0]!, amount: parseAmount('50.00'), fromAddress: 'SIM-CONFUSED-PAYER', tokenContract: DEMO_OTHER_TOKEN });
+      await settle(x.settings.network);
     }
 
     // Jump to the next morning.
@@ -142,10 +158,12 @@ export async function seedDemo(store: Store, config: ServiceConfig, realNow: Dat
 
   // A few open orders that the visitor can "pay" with the demo buttons.
   const live = new OrderService(store, config, () => realNow);
-  for (const [i, amount] of ['19.99', '45.00', '150.00'].entries()) {
-    await live.createOrder({ amount, network: 'simulated', externalRef: `SHOP-OPEN-${i + 1}`, expiresInMinutes: 1440 });
+  for (const [i, amount] of ['19.99', '45.00', '150.00', '72.50'].entries()) {
+    await live.createOrder({ amount, network: sims[i % sims.length]!.settings.network, externalRef: `SHOP-OPEN-${i + 1}`, expiresInMinutes: 1440 });
     created += 1;
   }
 
-  return { seeded: true, orders: created, latestBlock: await chain.getLatestBlockNumber() };
+  const latestBlocks = new Map<Network, number | null>();
+  for (const x of sims) latestBlocks.set(x.settings.network, await x.chain.getLatestBlockNumber());
+  return { seeded: true, orders: created, latestBlocks };
 }
